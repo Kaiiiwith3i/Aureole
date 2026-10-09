@@ -2,7 +2,7 @@
 
 ## Before you present
 
-- Run `./run.sh` once **with internet** (first run installs packages, trains the classifier in about 100 seconds and builds `demo/`). After that it starts in seconds with Wi-Fi off.
+- Run `./run.sh` once **with internet** (first run installs packages, trains the classifier in about a minute or two and builds `demo/`). After that it starts in seconds with Wi-Fi off.
 - Check that `demo/` holds ten files, `01_genuine.png` to `10_no_seal_edited.jpg`.
 - Open http://localhost:8000 and set the browser zoom to 125-150% for the projector.
 - Keep the `demo/` folder open next to the browser so you can drag files in.

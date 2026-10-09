@@ -22,7 +22,7 @@ Signet issues school certificates with a cryptographic seal and verifies photos 
 run.bat
 ```
 
-The first run creates `.venv`, installs dependencies, trains the change classifier (about 100 seconds on a MacBook Air M4), and builds the demo set into `demo/`. Later runs skip this and start in seconds, even without internet.
+The first run creates `.venv`, installs dependencies, trains the change classifier (45 to 100 seconds on a MacBook Air M4, depending on what else is running), and builds the demo set into `demo/`. Later runs skip this and start in seconds, even without internet.
 
 Open http://localhost:8000 in your browser. The script also prints a LAN URL for phones on the same network.
 
@@ -156,7 +156,7 @@ tests/
 
 ## Tests
 
-**Run all 102 tests** (about 45 seconds):
+**Run all 107 tests** (about 40 seconds):
 ```bash
 .venv/bin/python -m pytest tests -q
 ```
@@ -166,20 +166,24 @@ tests/
 .venv/bin/python -m pytest tests/test_acceptance.py -q -s
 ```
 
-Expected results (M4 MacBook Air, models warm):
+Measured on a MacBook Air M4 from a fresh clone (server started by `run.sh`, files posted to `/api/verify`, models warm):
 ```
-file                         expected               actual                 ms
-01_genuine.png               AUTHENTIC              AUTHENTIC              614
-02_genuine_photo.jpg         AUTHENTIC              AUTHENTIC              605
-03_stained_folded.jpg        AUTHENTIC_WITH_NOTES   AUTHENTIC_WITH_NOTES   746
-04_stamped_annotated.jpg     AUTHENTIC_WITH_NOTES   AUTHENTIC_WITH_NOTES   842
-05_grade_edited.png          MISMATCH               MISMATCH               657
-06_name_edited_photo.jpg     MISMATCH               MISMATCH               726
-07_revoked.png               REVOKED                REVOKED                668
-08_untrusted_seal.png        INVALID_SEAL           INVALID_SEAL           122
-09_smudged_field.jpg         INCONCLUSIVE           INCONCLUSIVE           1433
-10_no_seal_edited.jpg        NO_SEAL                NO_SEAL                966
+file                         expected               actual                   ms
+01_genuine.png               AUTHENTIC              AUTHENTIC               335
+02_genuine_photo.jpg         AUTHENTIC              AUTHENTIC               398
+03_stained_folded.jpg        AUTHENTIC_WITH_NOTES   AUTHENTIC_WITH_NOTES   1372
+04_stamped_annotated.jpg     AUTHENTIC_WITH_NOTES   AUTHENTIC_WITH_NOTES    423
+05_grade_edited.png          MISMATCH               MISMATCH                338
+06_name_edited_photo.jpg     MISMATCH               MISMATCH                369
+07_revoked.png               REVOKED                REVOKED                 355
+08_untrusted_seal.png        INVALID_SEAL           INVALID_SEAL             63
+09_smudged_field.jpg         INCONCLUSIVE           INCONCLUSIVE            677
+10_no_seal_edited.jpg        NO_SEAL                NO_SEAL                 459
 ```
+
+Beyond the ten files, three sweeps back the design rules (see DECISIONS.md, items 20-28): damage placed over every
+protected field never produced MISMATCH (0 of 108), single-field edits were always caught (56 of 56), and genuine photos
+stayed AUTHENTIC (16 of 16, plus 100 of 100 across four different people).
 
 **Offline proof:**
 ```bash
@@ -201,7 +205,8 @@ This test blocks all sockets, then runs a full issue -> verify -> revoke cycle. 
 - **Demo photos are simulated:** perspective, lighting, noise, blur, JPEG artifacts. Real phone photos of printed certificates have not been tested yet.
 - **One template:** cert-v1 only (A4 landscape, 200 DPI, six protected fields, four markers).
 - **Classifier training data:** trained on about 350 synthetic regions (stamp, handwriting, stain/damage, fold, text edit). Held-out accuracy is 0.94-0.96 on synthetic data. Real-world accuracy not yet measured.
-- **Copy-move detection:** requires a copied block roughly 85 px tall or 300 px wide or larger.
+- **Copy-move detection:** requires a copied block roughly 85 px tall or 300 px wide or larger. On a very blurry, steep photo where neither the seal nor the markers can be found, it can report regions that are not real edits.
+- **Scripts:** values must be Latin letters, digits and common punctuation (accents are fine). Anything the font can't print or the OCR can't read back is refused at issue time.
 - **ELA visualization:** shown as an image layer but not converted to findings (single-compression JPEG lights up every text edge, creating false positives).
 - **QR positioning:** marks drawn inside the QR box or over an alignment marker are not reported (those areas are ignored by the visual diff).
 - **Issuer key storage:** stored unencrypted in `keys/` (suitable for a lab or school; not for internet-facing production).

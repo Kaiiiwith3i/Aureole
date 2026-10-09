@@ -11,4 +11,4 @@
 - [x] Phase 2F: devtools, demo set, classifier training
 - [x] Phase 2: setup -> train -> demo set -> tests + acceptance
 - [x] Phase 3: independent QA, fix Critical/Major
-- [ ] Phase 4: README + DEMO.md, clean-shell final run
+- [x] Phase 4: README + DEMO.md, clean-shell final run

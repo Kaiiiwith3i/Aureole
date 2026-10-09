@@ -141,7 +141,7 @@ def main() -> None:
     done = sum(1 for xs, _ in out if xs)
     X = np.array([f for xs, _ in out for f in xs], np.float32)
     y = np.array([v for _, ys in out for v in ys])
-    print(f"{done}/{pages} pages (rest skipped by the {budget:.0f}s budget) -> {len(y)} regions in {time.time() - t0:.0f}s; per class:",
+    print(f"{pages} pages, {done} with change regions -> {len(y)} regions in {time.time() - t0:.0f}s; per class:",
           {LABELS[k]: int((y == k).sum()) for k in range(len(LABELS))})
     Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=0, stratify=y)
     clf = RandomForestClassifier(n_estimators=300, class_weight="balanced", min_samples_leaf=2, random_state=0, n_jobs=-1).fit(Xtr, ytr)
