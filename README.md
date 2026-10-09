@@ -1,8 +1,20 @@
 <p align="center"><img src="assets/readme-intro.svg" alt="50 Years after the death of Himmel the Hero" width="720"></p>
 
-# Aureole
+<h1 align="center">Aureole</h1>
 
-**Seal a document when you issue it. Check any later copy, photo or scan against what you issued, on your own machine.**
+<p align="center"><b>Seal a document when you issue it. Check any later copy, photo or scan against what you issued, on your own machine.</b></p>
+
+<p align="center">
+  <a href="#description">Description</a> ·
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="#why-does-this-product-benefit-from-running-ai-locally">Why local AI</a> ·
+  <a href="#how-to-set-up">Set up</a> ·
+  <a href="#how-to-manually-test">Manual test</a> ·
+  <a href="#models-used">Models</a> ·
+  <a href="#known-limits">Known limits</a>
+</p>
+
+<p align="center"><img src="assets/screenshots/landing.jpg" alt="Aureole landing page: Seal it once. Know if it changed." width="900"></p>
 
 ## Description
 
@@ -15,6 +27,34 @@ Forged and edited documents are hard to catch by eye: one digit changed in a sal
 A verification ends in one of seven verdicts: `AUTHENTIC`, `AUTHENTIC_WITH_NOTES`, `MODIFIED`, `INCONCLUSIVE`, `REVOKED`, `INVALID_SEAL` or `NOT_ISSUED`. The report shows the observable differences and leaves intent to a person. A public report hides the issued text and original image, and a valid seal alone is never treated as proof that the visible page matches.
 
 `/` is the landing page and `/app/` is the tool. Seal, registry, verdict and API rules are in [CONTRACTS.md](CONTRACTS.md); the reasoning behind them is in [DECISIONS.md](DECISIONS.md).
+
+## Screenshots
+
+Taken from the running app with the sample documents it builds on first run. All names in them are fictional.
+
+**An edited salary is caught.** One digit was changed on a sealed page. The seal still checks out, but the printed line no longer matches what was issued, so the verdict is `MODIFIED` and the line is marked on the scan.
+
+<p align="center"><img src="assets/screenshots/verify-modified.png" alt="Verify report with a MODIFIED verdict and the edited salary line outlined in red on the scan" width="900"></p>
+
+Signed-in staff also see what the line said when it was issued. A public report leaves that column out.
+
+<p align="center"><img src="assets/screenshots/verify-findings.png" alt="Findings: a text change on line 4, read as PHP 98,500.00 where PHP 48,500.00 was issued" width="900"></p>
+
+**Marks are told apart from edits.** A stamp and handwriting added to a photographed page are outlined and named. The text still matches, so the verdict is `AUTHENTIC_WITH_NOTES`.
+
+<p align="center"><img src="assets/screenshots/verify-notes.jpg" alt="A photographed page with a stamp and a handwritten mark, each outlined and listed as a finding" width="900"></p>
+
+**Issue.** Staff upload a file and get a sealed PDF with its id and fingerprint.
+
+<p align="center"><img src="assets/screenshots/issue.png" alt="Issue tab after sealing a text file, showing the document id, fingerprint and a Download sealed PDF button" width="900"></p>
+
+**Registry.** Staff download, revoke or reissue a document, and review signed copies. A replaced version shows as superseded.
+
+<p align="center"><img src="assets/screenshots/registry.png" alt="Registry tab listing issued documents with Download PDF, Revoke, Reissue and Review signed copy buttons" width="900"></p>
+
+**On a phone.** The same report at 375 px wide, for a photo of a page whose name was edited.
+
+<p align="center"><img src="assets/screenshots/mobile-verify.jpg" alt="The verify report on a phone, showing a MODIFIED verdict for a photographed page with an edited name" width="300"></p>
 
 ## Why does this product benefit from running AI locally?
 
