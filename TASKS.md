@@ -1,14 +1,14 @@
-# Tasks
+# V2 tasks
 
-- [x] Phase 0: git, venv, deps smoke test, contracts, schemas, template, stubs
-- [x] Phase 1A: seal, qr, registry
-- [x] Phase 1B: template, align, setup script
-- [x] Phase 1C: ocr, compare
-- [x] Phase 1D: diff, classify, forensics
-- [x] Phase 1E: web UI on mock report
-- [x] Phase 1F: run scripts + README skeleton
-- [x] Phase 2: pipeline + API (orchestrator)
-- [x] Phase 2F: devtools, demo set, classifier training
-- [x] Phase 2: setup -> train -> demo set -> tests + acceptance
-- [x] Phase 3: independent QA, fix Critical/Major
-- [x] Phase 4: README + DEMO.md, clean-shell final run
+- [x] SG2 seal, registry, issue and verify pipeline, API and three-tab UI
+- [x] Full existing Python suite, live server and Playwright desktop/mobile flows
+- [x] Preserve v1 registry; repair fresh-start path and v2 demo/training tools
+- [x] Test real DOCX and XLSX conversion with LibreOffice
+- [x] Remove unused copy-move detector
+- [x] Staff approval of signed scans while retaining valid unsigned originals
+- [x] Update README, demo guide and decisions for v2
+- [ ] Measure accuracy and failure rates on representative printed photos and stamps over text
+- [ ] Improve QR-only alignment if real-photo measurements show a need to verify marker-hidden pages
+- [ ] Test Windows launcher on Windows
+
+The remaining items require real capture hardware or a Windows machine. Synthetic data cannot establish field accuracy on them.

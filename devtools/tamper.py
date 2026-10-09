@@ -1,11 +1,10 @@
-"""Synthetic tampering and wear, applied in template space BEFORE photo simulation.
+"""Synthetic tampering and wear, applied to issued page images before photo simulation.
 Every function returns (new_image, bbox [x, y, w, h] of what it touched) and never modifies its input. Deterministic per seed."""
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from core import FONTS_DIR
-from core.template import draw_field, render_certificate, zones
 
 
 def _multiply(image: np.ndarray, alpha: np.ndarray, color_bgr) -> np.ndarray:
@@ -132,18 +131,22 @@ def add_fold(image: np.ndarray, position: float = 0.5, vertical: bool = True, se
     return out, bbox
 
 
-def retype_field(image: np.ndarray, key: str, new_value: str):
-    """Paint the field zone white and retype new_value in the same font (core.template.draw_field)."""
-    out = image.copy()
-    draw_field(out, key, new_value)
-    return out, list(zones()[key]["bbox"])
+def retype_line(image: np.ndarray, bbox: list[int], new_value: str):
+    """Replace one printed line in an issued page image."""
+    x, y, w, h = bbox
+    out = Image.fromarray(image[:, :, ::-1].copy())
+    draw = ImageDraw.Draw(out)
+    draw.rectangle([x - 4, y - 4, x + w + 4, y + h + 4], fill="white")
+    font = ImageFont.truetype(str(FONTS_DIR / "DejaVuSans.ttf"), 26)
+    draw.text((x, y + h), new_value, font=font, fill="black", anchor="ls")
+    return np.asarray(out)[:, :, ::-1].copy(), [x, y, w, h]
 
 
-def smudge_field(image: np.ndarray, key: str, seed: int = 0):
-    """Heavy blur/smear over one field zone only, strong enough that the value can't be read."""
+def smudge_line(image: np.ndarray, bbox: list[int], seed: int = 0):
+    """Heavy blur/smear over one printed line."""
     rng = np.random.default_rng(seed)
     out = image.copy()
-    x, y, w, h = zones()[key]["bbox"]
+    x, y, w, h = bbox
     crop = out[y:y + h, x:x + w].astype(np.float32)
     k = np.zeros((1, 81), np.float32)  # horizontal smear, then heavy blur and a vertical drag
     k[0] = 1 / 81
@@ -155,24 +158,3 @@ def smudge_field(image: np.ndarray, key: str, seed: int = 0):
     crop += rng.normal(0, 2, crop.shape)
     out[y:y + h, x:x + w] = np.clip(crop, 0, 255).astype(np.uint8)
     return out, [x, y, w, h]
-
-
-def copy_move(image: np.ndarray, src_bbox: list[int], dst_xy: tuple[int, int]):
-    """Copy the src_bbox block to dst_xy (top-left). Returns (image, dst bbox)."""
-    out = image.copy()
-    x, y, w, h = src_bbox
-    dx, dy = int(dst_xy[0]), int(dst_xy[1])
-    w = min(w, out.shape[1] - dx)
-    h = min(h, out.shape[0] - dy)
-    out[dy:dy + h, dx:dx + w] = image[y:y + h, x:x + w]
-    return out, [dx, dy, w, h]
-
-
-def rogue_reseal(fields: dict[str, str], doc_id: str, version: int = 1) -> np.ndarray:
-    """A certificate rendered with a seal signed by a freshly generated key that is NOT in keys/trusted."""
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
-    from core.seal import make_seal
-
-    text = make_seal(fields, doc_id, version, Ed25519PrivateKey.generate())
-    return render_certificate(fields, {"seal": text, "doc_id": doc_id, "version": version})

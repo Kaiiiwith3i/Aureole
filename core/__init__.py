@@ -6,7 +6,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 KEYS_DIR = ROOT / "keys"
 FONTS_DIR = ROOT / "assets" / "fonts"
-TEMPLATES_DIR = ROOT / "templates"
 MODEL_PATH = ROOT / "models" / "change_clf.joblib"
 
 log = logging.getLogger("signet")

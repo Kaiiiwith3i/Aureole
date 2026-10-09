@@ -44,9 +44,13 @@ frame around it holds:
 - The seal is a pointer plus a signature. It is never proof by itself: the page is always compared with the registry's copy.
 
 ## Registry (`core/registry.py`)
+The v2 SQLite file is `data_dir()/registry-v2.db`; a legacy `registry.db` is preserved without migration.
 One row per `(doc_id, version)`: `kid, title, source_name, source_type (txt|docx|pdf|xls|xlsx), pages, source_sha256
 (the upload), content_sha256 (converted PDF), file_sha256 (issued PDF), status (active|revoked|superseded), issued_at`.
 Files per version in `data_dir()/issued/<doc_id>_v<version>/`: `issued.pdf`, `source.<ext>`, `pages.json`.
+Staff-approved signed copies are additional records in `approvals` and files under `data_dir()/approved/<approval_id>/`.
+They do not replace or supersede the unsigned issued file. Each record links to one document version, keeps the uploaded
+scan(s), and stores a page-space mask of approved added ink for later scan comparison.
 `pages.json` = `[{"landscape": bool, "lines": [Line, ...]}, ...]`, one item per page.
 
 **Line** = `{"bbox": [x, y, w, h], "text": str, "numeric": bool, "readable": bool}`: one printed line of the issued page
@@ -60,27 +64,44 @@ upload -> `convert.to_pdf` (type by content, not by extension) -> `stamp.stamp` 
 OOXML (`vbaProject.bin`), empty document, more than **10 pages**, DOCX/XLS without LibreOffice.
 Reissue = same `doc_id`, next version; earlier active versions become `superseded`.
 
+## Signed copies
+Anyone holding an issued page may sign it. Staff upload a scanned PDF or all page photos, inspect Signet's comparison,
+then explicitly approve the copy. Approval is refused unless every page is present, the seal belongs to an active registry
+record, every readable printed line matches, and no text change is found. At least one visible added mark is required.
+Staff decide whether that mark is the expected signature; image classification does not establish the signer's identity.
+Approval stores the uploaded files and mark masks. The unsigned issued PDF stays active and valid.
+
 ## Verification (`core/pipeline.verify`)
 Input: 1-10 files (PNG/JPG/PDF), at most 10 pages in total, 25 MB in total.
-1. **Digital**: exactly one file whose SHA-256 equals a registry `file_sha256` -> `mode: "digital"`, verdict AUTHENTIC or REVOKED, no page analysis. This is the only exact result.
-2. Otherwise `mode: "pages"`: every PDF page is rendered at 200 DPI, every image is one page (downscaled above 3000 px), and each page goes through:
+1. **Digital**: exactly one file whose SHA-256 equals a registry `file_sha256` -> `mode: "digital"`, verdict AUTHENTIC or REVOKED, no page analysis.
+2. **Approved copy**: uploaded files byte-identical to a staff-approved signed set -> `mode: "approved"`, `approval_id` set, verdict AUTHENTIC_WITH_NOTES or REVOKED.
+3. Otherwise `mode: "pages"`: every PDF page is rendered at 200 DPI, every image is one page (downscaled above 3000 px), and each page goes through:
    `qr.decode_qr` (none: flatten with the markers and retry) -> `seal.verify_seal` -> registry lookup -> `align.align`
    -> expected = `stamp.render_page(issued.pdf, p)` -> per readable Line: OCR the crop (+8 px, coloured ink painted white)
    and `compare.compare_field` -> `diff.diff_regions` (ignoring markers + QR box) -> `classify` -> page verdict.
    A PDF that isn't byte-identical to the issued file (edited, re-saved, scanned) is checked this way, never as "digital".
+   If fewer than three markers are visible, QR-only alignment proves the seal but is not precise enough to compare the
+   whole page: return `INCONCLUSIVE` (or `REVOKED` for a revoked/superseded record) and request a full-page photo.
+   For a complete active document with matching printed lines, page-space added-ink masks are compared to staff-approved
+   masks. A close match sets `approval_id` and `AUTHENTIC_WITH_NOTES`; changed text or extra marks are never covered by
+   that approval: only a report that is already AUTHENTIC or AUTHENTIC_WITH_NOTES can carry one, and two mask sets match only
+   when >= 95% of each lies within 2 px of the other **and** neither has a solid blob (>= 80 px) the other lacks.
+   An uncertain mark match remains an ordinary page report without an approval claim.
 Budget: < 5 s per page, models warm.
 
 ### Line result
 - normalize / match / `MISMATCH only when OCR confidence >= 0.80` / near-match guard / ink-only reading: as in `core/compare.py` and v1 (a text line inside the 0.90 tolerance is still MISMATCH when the read is confident, its letters/digits differ, and the engine reads the clean expected crop exactly).
-- Covered line: a MISMATCH line with a non-text finding (stamp, handwriting, physical_damage, fold; confidence >= 0.6) on it becomes UNREADABLE. **Damage must never produce MISMATCH.**
+- Covered line: a MISMATCH line touched by a non-text finding (stamp, handwriting, physical_damage, fold; confidence >= 0.6) becomes UNREADABLE. A mark covers **every** line inside its outline (convex hull, plus the 8 px OCR margin), not only the one it is listed under: a stamp's ring garbles text it surrounds without inking it. **Damage must never produce MISMATCH.**
 - Lines with `readable: false` are skipped (counted in `lines_unchecked`).
 - ponytail: at most 150 lines per page are OCR-checked (largest first); the rest rely on the visual diff, with a note.
 
 ### Finding
 `{id, type, bbox, line, severity, confidence, message}`. `line` = index into the page's lines, or null.
-- type: `stamp | handwriting | physical_damage | fold | text_change | unknown`.
-- **Added text**: a region that touches no line and whose ink-only crop OCR-reads >= 4 letters/digits at confidence >= 0.80 is `text_change`, whatever the classifier says. On an arbitrary document the whole page is protected, not six zones.
-- severity: `text_change` -> `critical`; any other known type touching a line -> `warning`; everything else -> `info`.
+- type: `stamp | handwriting | physical_damage | fold | text_change | unknown`. A classification below confidence 0.6 is reported as `unknown`: a guess that can't move the verdict isn't shown as a fact.
+- **Added text**: a region that touches no line and whose dark ink (coloured and pale pixels painted white, so a stamp's own lettering doesn't count) OCR-reads >= 4 letters/digits at confidence >= 0.80 is `text_change`, whatever the classifier says. On an arbitrary document the whole page is protected, not six zones.
+- **Added code**: every QR code or 2D barcode on the scan except the seal is decoded and compared with the issued page's. One that isn't on the issued page (added, or swapped for another) is a `critical` `text_change` at confidence 1.0.
+- **Unexplained mark**: an `unknown` region of added ink of >= 1500 px lying wholly inside the content box is a `warning` ("Something was added here..."): the page can't be plain AUTHENTIC.
+- severity: `text_change` -> `critical` (so every critical finding decides the verdict); any other known type touching a line, or an unexplained mark -> `warning`; everything else -> `info`.
 - Every MISMATCH line gets one `critical` `text_change` finding framing the whole line.
 - message: one plain sentence, no accusations ("modified", never "forged"/"fake"/"fraud"). Never quotes the issued text.
 
@@ -92,7 +113,8 @@ Budget: < 5 s per page, models warm.
 5. `REVOKED`: registry status `revoked` or `superseded` (`current_version` set when superseded). The page is still analysed.
 6. `MODIFIED`: a line is MISMATCH, or a `text_change` finding has confidence >= 0.6.
 7. `INCONCLUSIVE`: alignment failed, or a readable line is UNREADABLE.
-8. `AUTHENTIC_WITH_NOTES`: every checked line matches and >= 1 finding of a known type has confidence >= 0.6.
+   QR-only alignment is also `INCONCLUSIVE`; it does not produce line or visual-diff findings.
+8. `AUTHENTIC_WITH_NOTES`: every checked line matches and there is >= 1 finding of a known type, or an unexplained mark.
 9. `AUTHENTIC`: every checked line matches; `unknown`/low-confidence regions are listed as minor differences.
 
 ### Report verdict
@@ -104,7 +126,9 @@ Headlines (page level; the report reuses the deciding page's, prefixed `Page p: 
 - AUTHENTIC (digital): `This file is identical to the issued document.`
 - AUTHENTIC (pages): `Seal verified. No differences from the issued document were found.`
 - AUTHENTIC_WITH_NOTES: `Seal verified and the text matches the issued document. We found extra markings on the page.`
-- MODIFIED: `{k} line(s) on this page don't match the issued document.` / `Text was added to this page that isn't in the issued document.` / more than half the checked lines differ: `The content of this page is different from the document this seal was issued for.`
+  An exact approved upload says it is identical to one staff approved. A later scan says the printed text matches and
+  its added marks closely match the approved copy; neither claim identifies the signer.
+- MODIFIED: `{k} line(s) on this page don't match the issued document.` / `Text was added to this page that isn't in the issued document.` / `A line on this page looks altered compared with the issued document.` (the visual diff caught it, OCR didn't) / `A QR code or barcode on this page isn't in the issued document.` / more than half the checked lines differ: `The content of this page is different from the document this seal was issued for.`
 - INCONCLUSIVE: `Seal verified, but parts of the page couldn't be read clearly enough to confirm them. Try a sharper photo.` / `This looks like a Signet page, but we couldn't read its seal. Try a flatter, sharper photo.`
 - REVOKED: `This seal is genuine, but the issuer replaced this document with version {n}.` / `...but the issuer has revoked this document.`
 - INVALID_SEAL: `This seal wasn't issued by a trusted issuer.`
@@ -122,8 +146,10 @@ Headlines (page level; the report reuses the deciding page's, prefixed `Page p: 
 - `POST /api/issue` (staff) multipart `file`, optional `title` -> `IssueResponse`
 - `POST /api/verify` multipart `files` (repeatable) -> `Report`
 - `GET /api/registry` (staff) -> `RegistryEntry[]`; `POST /api/registry/{doc_id}/revoke` (staff) -> `{ok}`; `POST /api/registry/{doc_id}/reissue` (staff) multipart `file`, optional `title` -> `IssueResponse`
+- `POST /api/registry/{doc_id}/approve` (staff) multipart repeatable `files` -> `ApprovalResponse`; `GET /api/registry/{doc_id}/approved` (staff) lists approved copies and their file URLs.
 - `GET /api/health` -> `Health`
 - Static: `/` serves `web/`; `/reports/<report_id>/<i>_{scan,expected,diff,ela}.jpg` (`i` = 1-based position in the upload); `/issued/<doc_id>_v<version>.pdf` (staff).
+- `/approved/<approval_id>/upload_<i>.<ext>` serves stored signed scans to staff only.
 - Errors: FastAPI default `{"detail": ...}`: 400 unreadable upload, 401 not staff, 404 unknown, 413 too large, 422 can't issue.
 
 ## Photo simulation (`devtools/photo_sim.py`), what diff/classify must tolerate

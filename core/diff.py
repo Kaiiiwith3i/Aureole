@@ -1,4 +1,4 @@
-"""Visual diff: expected render vs aligned scan -> change regions (both template size)."""
+"""Visual diff: expected render vs aligned scan -> change regions in page pixels."""
 from dataclasses import dataclass
 
 import cv2
@@ -7,7 +7,7 @@ import numpy as np
 
 @dataclass
 class Region:
-    bbox: tuple[int, int, int, int]  # x, y, w, h in template px
+    bbox: tuple[int, int, int, int]  # x, y, w, h in page px
     mask: np.ndarray  # uint8 (h, w), 255 where changed, cropped to bbox
     area: int  # changed pixels
     added: float  # 0..1 share of changed pixels that are ink present in the scan but not expected (rest = expected ink missing)

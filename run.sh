@@ -42,14 +42,14 @@ fi
 echo "Running setup..."
 .venv/bin/python scripts/setup.py
 
-# Train classifier if model missing
-if [[ ! -f "models/change_clf.joblib" ]]; then
+# Train classifier when the local model is absent or belongs to the deleted certificate flow.
+if ! .venv/bin/python -c 'import joblib; m=joblib.load("models/change_clf.joblib"); assert m.get("training") == "v2-issued-pages"' 2>/dev/null; then
   echo "Training classifier..."
   .venv/bin/python scripts/train_classifier.py
 fi
 
 # Create demo set if missing
-if [[ ! -f "demo/expected.json" ]]; then
+if ! .venv/bin/python -c 'from core import data_dir; from pathlib import Path; assert Path("demo/.v2-built").read_text() == str(data_dir().resolve()) and Path("demo/expected.json").is_file() and (data_dir() / "registry-v2.db").is_file()' 2>/dev/null; then
   echo "Creating demo set..."
   .venv/bin/python scripts/make_demo_set.py
 fi

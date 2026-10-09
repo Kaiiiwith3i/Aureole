@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from app.schemas import Health, IssueResponse, Login, RegistryEntry, Report
+from app.schemas import ApprovalResponse, Health, IssueResponse, Login, RegistryEntry, Report
 from core import KEYS_DIR, ROOT, convert, data_dir, layout, ocr, pipeline, seal
 from core.registry import Registry
 
@@ -20,6 +20,7 @@ DOC_ID = r"^[0-9a-f]{8}$"
 ISSUED_FILE = re.compile(r"^([0-9a-f]{8}_v\d{1,4})\.pdf$")
 REPORT_ID = re.compile(r"^[0-9a-f]{12}$")
 REPORT_FILE = re.compile(r"^\d{1,2}_(scan|expected|diff|ela)\.jpg$")
+APPROVED_FILE = re.compile(r"^upload_\d{1,2}\.(pdf|png|jpg|jpeg)$")
 COOKIE = "signet_staff"
 
 _sessions: set[str] = set()  # ponytail: in memory, so a restart signs staff out; persist if that ever matters
@@ -138,8 +139,10 @@ def verify(request: Request, files: list[UploadFile] = File(...)) -> Report:
 @app.get("/api/registry", dependencies=[Depends(staff)])
 def registry() -> list[RegistryEntry]:
     keys = ("doc_id", "version", "kid", "title", "source_name", "source_type", "pages", "status", "issued_at", "current_version")
+    db = Registry()
     return [RegistryEntry(**{k: e[k] for k in keys}, fingerprint=e["content_sha256"][:16],
-                          pdf_url=f"/issued/{e['doc_id']}_v{e['version']}.pdf") for e in Registry().list()]
+                          pdf_url=f"/issued/{e['doc_id']}_v{e['version']}.pdf",
+                          approved_copies=len(db.approvals(e["doc_id"], e["version"]))) for e in db.list()]
 
 
 @app.post("/api/registry/{doc_id}/revoke", dependencies=[Depends(staff)])
@@ -158,6 +161,45 @@ def reissue(doc_id: str, file: UploadFile = File(...), title: str = Form("")) ->
         raise HTTPException(404, "Unknown document.")
     except ValueError as e:
         raise HTTPException(422, str(e))
+
+
+@app.post("/api/registry/{doc_id}/approve", dependencies=[Depends(staff)])
+def approve_signed(doc_id: str, files: list[UploadFile] = File(...)) -> ApprovalResponse:
+    if not re.match(DOC_ID, doc_id) or Registry().get(doc_id) is None:
+        raise HTTPException(404, "Unknown document.")
+    if len(files) > layout.MAX_PAGES:
+        raise HTTPException(400, f"Send at most {layout.MAX_PAGES} files at a time.")
+    try:
+        result = pipeline.approve_signed(doc_id, _read(files))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return ApprovalResponse(**result)
+
+
+@app.get("/api/registry/{doc_id}/approved", dependencies=[Depends(staff)])
+def approved_copies(doc_id: str) -> list[dict]:
+    if not re.match(DOC_ID, doc_id) or Registry().get(doc_id) is None:
+        raise HTTPException(404, "Unknown document.")
+    out = []
+    db = Registry()
+    for version in db.list():
+        if version["doc_id"] != doc_id:
+            continue
+        for approval in db.approvals(doc_id, version["version"]):
+            folder = data_dir() / "approved" / approval["id"]
+            out.append({"id": approval["id"], "version": approval["version"], "approved_at": approval["approved_at"],
+                        "files": [f"/approved/{approval['id']}/{p.name}" for p in sorted(folder.glob("upload_*"))]})
+    return out
+
+
+@app.get("/approved/{approval_id}/{name}", dependencies=[Depends(staff)])
+def approved_file(approval_id: str, name: str) -> FileResponse:
+    if not REPORT_ID.match(approval_id) or not APPROVED_FILE.match(name):
+        raise HTTPException(404)
+    path = data_dir() / "approved" / approval_id / name
+    if not path.is_file():
+        raise HTTPException(404)
+    return FileResponse(path, filename=name)
 
 
 # Files are served through routes (not mounts) so SIGNET_DATA_DIR is read per request and names are validated.

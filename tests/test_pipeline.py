@@ -192,3 +192,78 @@ def test_bad_uploads():
             pipeline.verify([("bad", data)])
     with pytest.raises(ValueError):
         pipeline.issue(b"\x00\x01\x02", "blob.bin")
+
+
+def test_added_text_skips_ocr_on_thin_non_text_region():
+    from core.diff import Region
+    image = np.full((20, 1200, 3), 255, np.uint8)
+    region = Region((0, 0, 1200, 8), np.full((8, 1200), 255, np.uint8), 9600, 1.0)
+    assert pipeline._added_text(image, region) == 0.0
+
+
+def test_qr_only_page_is_inconclusive_instead_of_false_modified():
+    result, pdf = issue()
+    image = stamp.render_page(pdf, 0)
+    for x, y in layout.layout(False).markers.values():
+        cv2.rectangle(image, (x - 3, y - 3), (x + layout.MARKER + 3, y + layout.MARKER + 3), (255, 255, 255), -1)
+    photo = simulate_photo(image, seed=3)
+    report = pipeline.verify([("marker-hidden.jpg", jpg(photo))])
+    assert report.verdict == "INCONCLUSIVE" and "corners" in report.headline
+    assert report.pages[0].lines == [] and report.pages[0].findings == []
+
+
+def test_translucent_stamp_over_text_is_not_modified():
+    from devtools.tamper import add_stamp
+    result, pdf = issue()
+    line = line_with(result, "48,500")
+    x, y, w, h = line["bbox"]
+    image, _ = add_stamp(stamp.render_page(pdf, 0), (x + w // 2, y + h // 2), 80, seed=3)
+    report = pipeline.verify([("stamped.png", png(image))])
+    assert report.verdict in ("AUTHENTIC_WITH_NOTES", "INCONCLUSIVE")
+
+
+@pytest.mark.parametrize("seed", [11, 12, 13])
+def test_stamp_in_a_photo_is_a_note_not_a_modification(seed):
+    """The stamp's own lettering is not added printed text, and a stamp lying across several lines only makes them unreadable."""
+    from devtools.tamper import add_stamp
+    result, pdf = issue()
+    page = stamp.render_page(pdf, 0)
+    blank, _ = add_stamp(page, (500, 1500), 200, seed=5)
+    report = pipeline.verify([("stamped.jpg", jpg(simulate_photo(blank, seed=seed)))])
+    assert report.verdict == "AUTHENTIC_WITH_NOTES", report.headline
+    assert any(f.type == "stamp" for f in report.pages[0].findings)
+    x, y, w, h = line_with(result, "48,500")["bbox"]
+    across, _ = add_stamp(page, (x + w // 2, y + h // 2), 90, seed=3)
+    report = pipeline.verify([("stamped.jpg", jpg(simulate_photo(across, seed=seed)))])
+    assert report.verdict == "INCONCLUSIVE", (report.headline, report.pages[0].lines)
+    assert not any(line.status == "MISMATCH" for line in report.pages[0].lines)
+
+
+def test_damage_beside_a_line_is_never_a_mismatch():
+    """QA: a stamp or stain centred on one line garbled its neighbours, which carried none of the mark's own ink."""
+    from devtools.tamper import add_stain, add_stamp
+    result, pdf = issue()
+    page = stamp.render_page(pdf, 0)
+    x, y, w, h = page_lines(result)[1]["bbox"]
+    for marked in (add_stamp(page, (x + w // 2, y + h // 2), 120, seed=2)[0], add_stain(page, (x + w // 2, y + h // 2), 150, seed=2)[0]):
+        report = pipeline.verify([("damaged.jpg", jpg(simulate_photo(marked, seed=7)))])
+        assert report.verdict in ("AUTHENTIC_WITH_NOTES", "INCONCLUSIVE"), (report.headline, report.pages[0].lines)
+        assert not any(line.status == "MISMATCH" for line in report.pages[0].lines)
+
+
+def test_added_code_or_unexplained_mark_is_never_plain_authentic():
+    result, pdf = issue()
+    page = stamp.render_page(pdf, 0)
+    coded = page.copy()  # a payment QR pasted onto blank paper: the kind of thing a fraudster adds
+    coded[1200:1500, 900:1200] = cv2.cvtColor(qr.render_qr("https://example.com/pay?id=12345", 300), cv2.COLOR_GRAY2BGR)
+    for data in (png(coded), jpg(simulate_photo(coded, seed=4))):
+        report = pipeline.verify([("coded", data)])
+        assert report.verdict == "MODIFIED" and report.headline == pipeline.HEADLINES["code"], report.headline
+    barred = page.copy()
+    cv2.rectangle(barred, (400, 1300), (1000, 1400), (0, 0, 0), -1)
+    report = pipeline.verify([("barred.png", png(barred))])
+    assert report.verdict == "AUTHENTIC_WITH_NOTES", report.headline
+    assert any(f.severity == "warning" and "added" in f.message for f in report.pages[0].findings)
+    # every finding shown as critical must also decide the verdict
+    for r in (report, pipeline.verify([("clean.png", png(page))])):
+        assert not any(f.severity == "critical" for f in r.pages[0].findings)

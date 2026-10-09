@@ -14,6 +14,9 @@ _SCHEMA = """CREATE TABLE IF NOT EXISTS docs (
     source_sha256 TEXT NOT NULL, content_sha256 TEXT NOT NULL, file_sha256 TEXT NOT NULL,
     status TEXT NOT NULL, issued_at TEXT NOT NULL, PRIMARY KEY (doc_id, version))"""
 _INDEX = "CREATE INDEX IF NOT EXISTS docs_file_sha256 ON docs (file_sha256)"
+_APPROVALS = """CREATE TABLE IF NOT EXISTS approvals (
+    id TEXT PRIMARY KEY, doc_id TEXT NOT NULL, version INTEGER NOT NULL,
+    file_digest TEXT NOT NULL UNIQUE, pages INTEGER NOT NULL, approved_at TEXT NOT NULL)"""
 _SELECT = """SELECT d.*, (SELECT MAX(version) FROM docs WHERE doc_id = d.doc_id) AS current_version FROM docs d"""
 
 
@@ -24,19 +27,39 @@ class Registry:
      "status": "active" | "revoked" | "superseded", "issued_at": ISO-8601 UTC str,
      "current_version": int (highest version of doc_id)}
     Open a new sqlite3 connection per call (the API is threaded); create the table if missing.
-    v1 databases (fields/seal columns) are not migrated: delete runtime/registry.db before running v2.
+    v1 databases are kept in runtime/registry.db; v2 uses a separate database.
     """
 
     def __init__(self, db_path: Path | None = None):
-        """db_path defaults to core.data_dir() / "registry.db"."""
-        self.db_path = Path(db_path) if db_path else data_dir() / "registry.db"
+        """db_path defaults to core.data_dir() / "registry-v2.db"."""
+        self.db_path = Path(db_path) if db_path else data_dir() / "registry-v2.db"
 
     def _conn(self) -> sqlite3.Connection:
         c = sqlite3.connect(self.db_path)
         c.row_factory = sqlite3.Row
         c.execute(_SCHEMA)
         c.execute(_INDEX)
+        c.execute(_APPROVALS)
         return c
+
+    def approve(self, approval_id: str, doc_id: str, version: int, file_digest: str, pages: int) -> dict:
+        """Record staff approval of one complete signed copy; repeat uploads return the original approval."""
+        with closing(self._conn()) as c, c:
+            old = c.execute("SELECT * FROM approvals WHERE file_digest = ?", (file_digest,)).fetchone()
+            if old:
+                return dict(old)
+            at = datetime.now(timezone.utc).isoformat()
+            c.execute("INSERT INTO approvals VALUES (?,?,?,?,?,?)", (approval_id, doc_id, version, file_digest, pages, at))
+        return dict(id=approval_id, doc_id=doc_id, version=version, file_digest=file_digest, pages=pages, approved_at=at)
+
+    def find_approval(self, file_digest: str) -> dict | None:
+        with closing(self._conn()) as c:
+            row = c.execute("SELECT * FROM approvals WHERE file_digest = ?", (file_digest,)).fetchone()
+        return dict(row) if row else None
+
+    def approvals(self, doc_id: str, version: int) -> list[dict]:
+        with closing(self._conn()) as c:
+            return [dict(r) for r in c.execute("SELECT * FROM approvals WHERE doc_id = ? AND version = ?", (doc_id, version))]
 
     def next_version(self, doc_id: str) -> int:
         """1 for an unknown doc_id, else highest version + 1."""

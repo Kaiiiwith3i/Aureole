@@ -70,12 +70,13 @@ class PageReport(BaseModel):
 class Report(BaseModel):
     report_id: str
     filename: str = ""
-    mode: Literal["digital", "pages"]
+    mode: Literal["digital", "pages", "approved"]
     verdict: Verdict
     headline: str
     doc_id: str | None = None
     version: int | None = None
     current_version: int | None = None  # set when REVOKED by supersession
+    approval_id: str | None = None  # staff-approved signed copy, when matched
     kid: str | None = None
     registry_status: RegistryStatus | None = None
     pages_total: int | None = None  # page count of the issued document
@@ -98,6 +99,15 @@ class RegistryEntry(BaseModel):
     issued_at: str
     current_version: int
     pdf_url: str
+    approved_copies: int = 0
+
+
+class ApprovalResponse(BaseModel):
+    id: str
+    doc_id: str
+    version: int
+    pages: int
+    approved_at: str
 
 
 class Health(BaseModel):

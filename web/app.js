@@ -111,7 +111,12 @@ async function verify() {
   busy = true;
   $("go").disabled = true;
   $("report").replaceChildren();
-  say("v-status", `Verifying ${queue.length} file${queue.length > 1 ? "s" : ""} offline…`, "busy");
+  const status = $("v-status");
+  status.replaceChildren(el("div", { class: "verify-progress busy" },
+    el("div", { class: "progress-mark", "aria-hidden": "true" }),
+    el("div", {},
+      el("strong", { text: "We’re verifying your document" }),
+      el("span", { text: `Checking ${queue.length} file${queue.length > 1 ? "s" : ""} for its seal, pages, and printed content.` }))));
   try {
     const fd = new FormData();
     queue.forEach((f) => fd.append("files", f, f.name || "capture.jpg"));
@@ -206,6 +211,7 @@ function renderReport(r) {
   const meta = [
     ["File", r.filename], ["Doc", r.doc_id],
     ["Version", r.version != null ? "v" + r.version + (r.current_version && r.current_version !== r.version ? " (current v" + r.current_version + ")" : "") : null],
+    ["Staff approval", r.approval_id],
     ["Registry", r.registry_status], ["Pages checked", checked],
     ["Time", r.timings && r.timings.total != null ? Math.round(r.timings.total) + " ms" : null],
   ].filter(([, v]) => v);
@@ -217,16 +223,18 @@ function renderReport(r) {
     el("ul", { class: "meta" }, meta.map(([k, v]) => el("li", {}, k + ": ", el("b", { text: v })))),
   ];
   if (r.notes && r.notes.length) out.push(el("ul", { class: "notes" }, r.notes.map((n) => el("li", { text: n }))));
-  if (r.mode === "digital") {
-    out.push(el("p", { class: "muted", text: r.verdict === "REVOKED"
-      ? "This file is byte-identical to a file Signet issued, but that document has since been revoked or replaced."
+  if (r.mode === "digital" || r.mode === "approved") {
+    out.push(el("p", { class: "muted", text: r.mode === "approved"
+      ? r.verdict === "REVOKED" ? "This signed copy was approved by staff, but the document has since been revoked or replaced."
+        : "These files match a signed copy approved by issuer staff."
+      : r.verdict === "REVOKED" ? "This file is byte-identical to a file Signet issued, but that document has since been revoked or replaced."
       : "This file is byte-identical to the issued file. No page analysis was needed." }));
   } else if (r.pages && r.pages.length) {
     out.push(pagesView(r.pages));
   }
   out.push(el("p", { class: "disclaimer", text: "Signet explains what changed. A person makes the final decision." }));
   $("report").replaceChildren(...out);
-  $("report").scrollIntoView({ block: "start", behavior: "smooth" });
+  $("report").scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
 }
 
 function pagesView(pages) {
@@ -253,7 +261,7 @@ function pageView(p) {
     el("p", { class: "muted", text: `${p.lines_matched} of ${p.lines_total} lines match, ${p.lines_unchecked} not machine-checkable.` }),
   ];
   if (p.notes && p.notes.length) out.push(el("ul", { class: "notes" }, p.notes.map((n) => el("li", { text: n }))));
-  out.push(el("h3", { text: "Where it differs" }), viewer(p));
+  out.push(el("h3", { text: p.verdict === "AUTHENTIC" ? "Page review" : "Where it differs" }), viewer(p));
   if (p.lines.length) {
     const head = ["Status", "What was read"].concat(hasExpected ? ["Issued text"] : []);
     out.push(el("h3", { text: "Lines that don't match" }),
@@ -316,7 +324,7 @@ function viewer(p) {
     toggles.length ? el("div", { class: "layers", role: "group", "aria-label": "Image layer" }, toggles.map((t) => t[1])) : null,
     stage,
     el("h3", { text: "Findings" }),
-    main.length ? el("ul", { class: "findings" }, main) : el("p", { class: "muted", text: "No findings of a known type." }),
+    main.length ? el("ul", { class: "findings" }, main) : el("p", { class: "muted", text: p.verdict === "AUTHENTIC" ? "No differences found on this page." : "No specific finding is available for this page." }),
     minor.length ? el("details", {}, el("summary", { text: `Minor differences, likely capture noise (${minor.length})` }), el("ul", { class: "findings" }, minor)) : null);
 }
 
@@ -332,7 +340,7 @@ $("issue-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const btn = $("issue-btn");
   btn.disabled = true;
-  say("i-status", "Converting, signing and rendering…", "busy");
+  say("i-status", "We’re preparing your sealed document…", "busy");
   $("i-result").replaceChildren();
   try {
     const r = await api("/api/issue", { method: "POST", body: new FormData(e.target) });
@@ -358,6 +366,7 @@ async function loadRegistry() {
 $("reg-refresh").onclick = loadRegistry;
 
 let reissueDoc = null;
+let approveDoc = null;
 $("reissue-in").addEventListener("change", async (e) => {
   const f = e.target.files[0]; e.target.value = "";
   if (!f || !reissueDoc) return;
@@ -370,7 +379,36 @@ $("reissue-in").addEventListener("change", async (e) => {
   } catch (err) { staffCall(err); say("r-status", "Couldn't reissue. " + err.message, "err"); }
 });
 
+$("approve-in").addEventListener("change", async (e) => {
+  const files = [...e.target.files]; e.target.value = "";
+  if (!files.length || !approveDoc) return;
+  const docId = approveDoc;
+  const fd = new FormData(); files.forEach((f) => fd.append("files", f));
+  showTab($("tab-verify"));
+  say("v-status", "Checking the signed copy against the issued document…", "busy");
+  try {
+    const report = await api("/api/verify", { method: "POST", body: fd });
+    say("v-status", ""); renderReport(report);
+    if (report.mode === "approved" && report.doc_id === docId) {
+      say("v-status", `This signed copy is already approved (${report.approval_id}).`, "muted"); return;
+    }
+    const clean = report.doc_id === docId && report.registry_status === "active" && report.mode === "pages"
+      && ["AUTHENTIC", "AUTHENTIC_WITH_NOTES"].includes(report.verdict)
+      && report.pages_checked.length === report.pages_total;
+    if (!clean) { say("v-status", "This copy cannot be approved: its printed content or pages did not pass verification.", "err"); return; }
+    const btn = el("button", { type: "button", class: "btn primary", text: "Approve this signed copy", onclick: async () => {
+      btn.disabled = true;
+      try {
+        const approved = await api(`/api/registry/${encodeURIComponent(docId)}/approve`, { method: "POST", body: fd });
+        btn.remove(); say("v-status", `Signed copy approved (${approved.id}). The unsigned issued file remains valid.`, "muted");
+      } catch (err) { staffCall(err); say("v-status", "Could not approve this copy. " + err.message, "err"); btn.disabled = false; }
+    } });
+    $("report").prepend(el("div", { class: "row" }, btn));
+  } catch (err) { staffCall(err); say("v-status", "Could not review this copy. " + err.message, "err"); }
+});
+
 function entryCard(en) {
+  const approvedList = el("div", { class: "d" });
   const actions = en.status === "active" ? [
     el("button", { type: "button", class: "btn danger", text: "Revoke", onclick: async () => {
       if (!confirm(`Revoke ${en.doc_id} (${en.title})? Verifying it will report it as revoked.`)) return;
@@ -378,18 +416,26 @@ function entryCard(en) {
       loadRegistry();
     } }),
     el("button", { type: "button", class: "btn", text: "Reissue", onclick: () => { reissueDoc = en.doc_id; $("reissue-in").click(); } }),
+    el("button", { type: "button", class: "btn", text: "Review signed copy", onclick: () => { approveDoc = en.doc_id; $("approve-in").click(); } }),
   ] : [];
+  if (en.approved_copies) actions.push(el("button", { type: "button", class: "btn", text: "Approved copies", onclick: async () => {
+    try {
+      const copies = await api(`/api/registry/${encodeURIComponent(en.doc_id)}/approved`);
+      approvedList.replaceChildren(...copies.filter((c) => c.version === en.version).flatMap((c) => c.files.map((url, i) =>
+        el("a", { class: "btn", href: url, download: "", text: `Approved ${c.id}, file ${i + 1}` }))));
+    } catch (err) { staffCall(err); say("r-status", "Could not load approved copies. " + err.message, "err"); }
+  } }));
   return el("article", { class: "entry" },
     el("div", { class: "row spread" }, el("span", { class: "t", text: en.title }), chip(en.status, en.status)),
     el("div", { class: "d", text: `${en.source_name} | ${en.source_type.toUpperCase()} | ${en.pages} page${en.pages === 1 ? "" : "s"}` }),
-    el("div", { class: "d", text: `${en.doc_id} v${en.version} | fingerprint ${groups4(en.fingerprint)} | issued ${new Date(en.issued_at).toLocaleString()}` }),
-    el("div", { class: "row" }, el("a", { class: "btn", href: en.pdf_url, download: "", text: "Download PDF" }), actions));
+    el("div", { class: "d", text: `${en.doc_id} v${en.version} | fingerprint ${groups4(en.fingerprint)} | ${en.approved_copies} approved signed cop${en.approved_copies === 1 ? "y" : "ies"} | issued ${new Date(en.issued_at).toLocaleString()}` }),
+    el("div", { class: "row" }, el("a", { class: "btn", href: en.pdf_url, download: "", text: "Download PDF" }), actions), approvedList);
 }
 
 /* ---------- health ---------- */
 api("/api/health").then(
   (h) => {
-    $("health").textContent = `Offline mode: on-device OCR (${h.ocr_engine})`;
+    $("health").textContent = `Local verification engine: ${h.ocr_engine}`;
     $("conv-note").hidden = h.converter !== false;
   },
   () => { $("health").textContent = "Server status unavailable."; });

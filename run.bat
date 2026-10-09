@@ -28,11 +28,13 @@ if not exist ".venv\.installed" (
 
 ".venv\Scripts\python.exe" scripts\setup.py || exit /b 1
 
-if not exist "models\change_clf.joblib" (
+".venv\Scripts\python.exe" -c "import joblib; m=joblib.load('models/change_clf.joblib'); assert m.get('training') == 'v2-issued-pages'" >nul 2>&1
+if errorlevel 1 (
   echo Training classifier...
   ".venv\Scripts\python.exe" scripts\train_classifier.py || exit /b 1
 )
-if not exist "demo\expected.json" (
+".venv\Scripts\python.exe" -c "from core import data_dir; from pathlib import Path; assert Path('demo/.v2-built').read_text() == str(data_dir().resolve()) and Path('demo/expected.json').is_file() and (data_dir() / 'registry-v2.db').is_file()" >nul 2>&1
+if errorlevel 1 (
   echo Creating demo set...
   ".venv\Scripts\python.exe" scripts\make_demo_set.py || exit /b 1
 )

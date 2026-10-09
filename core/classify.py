@@ -27,7 +27,7 @@ def _gray(img: np.ndarray) -> np.ndarray:
 
 
 def extract_features(aligned: np.ndarray, expected: np.ndarray, region: Region, zone_bboxes: list[list[int]], ela: np.ndarray | None = None) -> np.ndarray:
-    """float32 vector, len(FEATURE_NAMES). `ela` is a gray uint8 ELA map in template space (or None -> ela_mean 0).
+    """float32 vector, len(FEATURE_NAMES). `ela` is a gray uint8 ELA map in page space (or None -> ela_mean 0).
     zone_overlap = share of the region bbox that lies inside any protected zone bbox. Must be cheap (< 5 ms per region)."""
     x, y, w, h = region.bbox
     s = max(1, math.ceil(max(w, h) / _MAXSIDE))
