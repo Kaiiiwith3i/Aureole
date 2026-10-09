@@ -17,7 +17,7 @@ function el(tag, props, ...kids) {
 async function api(path, opts) {
   let res;
   try { res = await fetch(path, opts); }
-  catch { throw new Error("Can't reach the Signet server. Is it running?"); }
+  catch { throw new Error("Can't reach the Aureole server. Is it running?"); }
   let body = null;
   try { body = await res.json(); } catch { /* non-JSON body */ }
   if (!res.ok) {
@@ -227,12 +227,12 @@ function renderReport(r) {
     out.push(el("p", { class: "muted", text: r.mode === "approved"
       ? r.verdict === "REVOKED" ? "This signed copy was approved by staff, but the document has since been revoked or replaced."
         : "These files match a signed copy approved by issuer staff."
-      : r.verdict === "REVOKED" ? "This file is byte-identical to a file Signet issued, but that document has since been revoked or replaced."
+      : r.verdict === "REVOKED" ? "This file is byte-identical to a file Aureole issued, but that document has since been revoked or replaced."
       : "This file is byte-identical to the issued file. No page analysis was needed." }));
   } else if (r.pages && r.pages.length) {
     out.push(pagesView(r.pages));
   }
-  out.push(el("p", { class: "disclaimer", text: "Signet explains what changed. A person makes the final decision." }));
+  out.push(el("p", { class: "disclaimer", text: "Aureole explains what changed. A person makes the final decision." }));
   $("report").replaceChildren(...out);
   $("report").scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
 }

@@ -85,3 +85,13 @@ def test_upload_errors(client):
     assert client.get("/reports/..%2f..%2fkeys/1_scan.jpg").status_code == 404
     health = client.get("/api/health").json()
     assert health["ok"] and health["offline"] and isinstance(health["converter"], bool)
+
+
+def test_landing_page_and_tool_are_both_served(client):
+    home = client.get("/")
+    assert home.status_code == 200 and "Aureole" in home.text and 'href="/app/"' in home.text
+    tool = client.get("/app/")
+    assert tool.status_code == 200 and 'id="tab-verify"' in tool.text
+    assert client.get("/app", follow_redirects=False).status_code in (301, 307, 308)  # the tool's relative assets need the slash
+    for asset in ("/landing.css", "/app/app.js", "/app/styles.css", "/app/mock_report.json"):
+        assert client.get(asset).status_code == 200, asset

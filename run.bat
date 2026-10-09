@@ -1,5 +1,5 @@
 @echo off
-REM Signet: one-command start for Windows. Works from any directory; the path may contain spaces.
+REM Aureole: one-command start for Windows. Works from any directory; the path may contain spaces.
 REM NOTE: written on macOS and not yet run on Windows.
 setlocal
 cd /d "%~dp0"
@@ -41,7 +41,7 @@ if errorlevel 1 (
 
 if not defined PORT set "PORT=8000"
 echo.
-echo Signet server starting on:
+echo Aureole server starting on:
 echo   http://localhost:%PORT%
 ".venv\Scripts\python.exe" -c "import socket;s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.connect(('10.255.255.255',1));print('  http://'+s.getsockname()[0]+':%PORT%')" 2>nul
 echo.

@@ -3,105 +3,290 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Signet</title>
-<link rel="stylesheet" href="styles.css">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%2314365c' d='M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z'/%3E%3C/svg%3E">
+<title>Aureole: seal a document, know if it changed</title>
+<meta name="description" content="Aureole seals any document and checks whether a file or a photo of its pages still matches what was issued. It runs entirely on your own machine.">
+<link rel="stylesheet" href="landing.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%231f2848' stroke='%23ecd391' stroke-width='2'/%3E%3Cpath fill='%23ecd391' d='M12 5l1.5 5.5L19 12l-5.5 1.5L12 19l-1.5-5.5L5 12l5.5-1.5z'/%3E%3C/svg%3E">
 </head>
 <body>
-<header class="top">
-  <div class="brand">
-    <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.5 12 2.5 2.5 4.5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <div><h1>Signet</h1><p class="tag">We don't accuse, we explain.</p></div>
+<a class="skip" href="#how">Skip to how it works</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="fl" viewBox="-12 -12 24 46" overflow="visible">
+    <path d="M0 5C2 16-2 24 0 34" fill="none" stroke="#3f7a5f" stroke-width="1.6" stroke-linecap="round"/>
+    <g fill="#7fa9e6"><ellipse cy="-6" rx="3.6" ry="6"/><ellipse cy="-6" rx="3.6" ry="6" transform="rotate(72)"/><ellipse cy="-6" rx="3.6" ry="6" transform="rotate(144)"/><ellipse cy="-6" rx="3.6" ry="6" transform="rotate(216)"/><ellipse cy="-6" rx="3.6" ry="6" transform="rotate(288)"/></g>
+    <circle r="2.3" fill="#ecd391"/>
+  </symbol>
+  <symbol id="mark" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="currentColor" d="M12 5l1.5 5.5L19 12l-5.5 1.5L12 19l-1.5-5.5L5 12l5.5-1.5z"/></symbol>
+</svg>
+
+<header class="hero">
+  <svg class="clouds" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMid slice" aria-hidden="true" fill="#fff">
+    <g class="cloud" opacity=".9"><ellipse cx="170" cy="120" rx="90" ry="26"/><ellipse cx="118" cy="132" rx="60" ry="20"/><ellipse cx="232" cy="134" rx="70" ry="20"/></g>
+    <g class="cloud slow" opacity=".75"><ellipse cx="820" cy="80" rx="110" ry="28"/><ellipse cx="748" cy="94" rx="70" ry="20"/><ellipse cx="902" cy="96" rx="80" ry="22"/></g>
+    <g class="cloud" opacity=".6" style="animation-delay:-30s"><ellipse cx="1060" cy="250" rx="80" ry="20"/><ellipse cx="1008" cy="260" rx="50" ry="15"/></g>
+    <g class="cloud slow" opacity=".55" style="animation-delay:-50s"><ellipse cx="480" cy="230" rx="70" ry="18"/><ellipse cx="532" cy="240" rx="50" ry="14"/></g>
+  </svg>
+  <div class="wrap">
+    <nav class="nav" aria-label="Main">
+      <a class="brand" href="/"><svg width="30" height="30" aria-hidden="true"><use href="#mark"/></svg>Aureole</a>
+      <div class="nav-links">
+        <a href="#how">How it works</a><a href="#mimic">What it catches</a><a href="#verdicts">Verdicts</a>
+        <a class="btn gold" href="/app/">Open the tool</a>
+      </div>
+    </nav>
+    <div class="hero-grid">
+      <div>
+        <p class="eyebrow">Document sealing and verification</p>
+        <h1>Seal it once.<br><em>Know if it changed.</em></h1>
+        <p class="lede">Aureole frames every page of a document with a signed seal, then checks whether a file or a photo of those pages still matches what was issued. It shows where a page differs and leaves the judgement to a person.</p>
+        <div class="cta">
+          <a class="btn gold" href="/app/">Verify a document</a>
+          <a class="btn ghost" href="#how">See how it works</a>
+        </div>
+        <p class="aside">An elf mage might wait eighty years before checking. Aureole takes a couple of seconds per page.</p>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <svg viewBox="0 0 400 400">
+          <defs><radialGradient id="halo"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset=".62" stop-color="#fff6d8" stop-opacity=".6"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>
+          <circle cx="200" cy="200" r="200" fill="url(#halo)"/>
+          <g class="spin" fill="none" stroke="#b9902f">
+            <circle cx="200" cy="200" r="190" stroke-width="1.5"/>
+            <circle cx="200" cy="200" r="178" stroke-width="7" stroke-dasharray="1.6 45" opacity=".8"/>
+            <circle cx="200" cy="200" r="166"/>
+            <path d="M200 50 329.9 275 70.1 275Z" stroke-width="1.4"/><path d="M200 350 70.1 125 329.9 125Z" stroke-width="1.4"/>
+            <g fill="#fff" stroke-width="1.6"><circle cx="200" cy="50" r="9"/><circle cx="329.9" cy="125" r="9"/><circle cx="329.9" cy="275" r="9"/><circle cx="200" cy="350" r="9"/><circle cx="70.1" cy="275" r="9"/><circle cx="70.1" cy="125" r="9"/></g>
+          </g>
+          <g class="spin rev" fill="none" stroke="#5b8fd9" opacity=".85">
+            <circle cx="200" cy="200" r="132"/><circle cx="200" cy="200" r="122" stroke-dasharray="4 8"/>
+            <rect x="113.5" y="113.5" width="173" height="173"/><path d="M200 78 322 200 200 322 78 200Z"/>
+          </g>
+          <g transform="translate(200 200) scale(1.3) translate(-200 -200)"><g class="bob">
+            <rect x="150" y="131" width="108" height="148" rx="8" fill="#27304f" opacity=".16"/>
+            <rect x="146" y="126" width="108" height="148" rx="8" fill="#fff" stroke="#e6dcc0"/>
+            <g fill="#1b2536"><rect x="152" y="132" width="9" height="9" rx="1.5"/><rect x="239" y="132" width="9" height="9" rx="1.5"/><rect x="239" y="259" width="9" height="9" rx="1.5"/><rect x="152" y="259" width="9" height="9" rx="1.5"/></g>
+            <rect x="166" y="148" width="46" height="5" rx="2.5" fill="#6c7896"/>
+            <g fill="#c5cbdb"><rect x="166" y="162" width="68" height="4" rx="2"/><rect x="166" y="173" width="60" height="4" rx="2"/><rect x="166" y="184" width="66" height="4" rx="2"/><rect x="166" y="195" width="52" height="4" rx="2"/><rect x="166" y="206" width="64" height="4" rx="2"/><rect x="166" y="217" width="40" height="4" rx="2"/></g>
+            <g fill="#8d97b3"><rect x="166" y="246" width="40" height="3.5" rx="1.75"/><rect x="166" y="254" width="28" height="3.5" rx="1.75"/></g>
+            <rect x="214" y="240" width="20" height="20" rx="2.5" fill="#fff" stroke="#1b2536" stroke-width="1.3"/>
+            <g fill="#1b2536"><rect x="217" y="243" width="5" height="5"/><rect x="226" y="243" width="5" height="5"/><rect x="217" y="252" width="5" height="5"/><rect x="224" y="250" width="3" height="3"/><rect x="228" y="254" width="3" height="3"/></g>
+            <circle class="twinkle" cx="224" cy="250" r="17" fill="none" stroke="#c9a24b" stroke-width="2"/>
+          </g></g>
+        </svg>
+      </div>
+    </div>
   </div>
-  <div role="tablist" aria-label="Sections" class="tabs">
-    <button role="tab" id="tab-issue" aria-controls="issue" aria-selected="false" tabindex="-1">Issue</button>
-    <button role="tab" id="tab-verify" aria-controls="verify" aria-selected="true">Verify</button>
-    <button role="tab" id="tab-registry" aria-controls="registry" aria-selected="false" tabindex="-1">Registry</button>
+  <div class="field" aria-hidden="true">
+    <svg viewBox="0 0 1200 200" preserveAspectRatio="xMidYMax slice">
+      <path d="M0 124L130 66 250 108 390 40 530 112 650 74 770 118 910 52 1050 110 1200 68V200H0Z" fill="#bcd6ee"/>
+      <path d="M0 118C200 60 400 138 620 100S1000 58 1200 108V200H0Z" fill="#a3d6ac"/>
+      <g transform="translate(905 86)" style="filter:drop-shadow(0 0 1.2px rgba(39,48,79,.6))">
+        <path d="M24 -56V46" stroke="#b08a3a" stroke-width="3" stroke-linecap="round"/><circle cx="24" cy="-65" r="9" fill="none" stroke="#ecd391" stroke-width="3"/><circle cx="24" cy="-65" r="3" fill="#ecd391"/>
+        <path class="sway" d="M-7 -34C-21 -18-23 12-16 36" fill="none" stroke="#f7f8fc" stroke-width="6" stroke-linecap="round"/>
+        <path class="sway" d="M7 -34C21 -18 23 12 16 36" fill="none" stroke="#f7f8fc" stroke-width="6" stroke-linecap="round" style="animation-delay:-2s"/>
+        <path d="M-17 48Q-5 -22 0 -25Q5 -22 17 48Z" fill="#e3e8f4"/><path d="M-17 48Q0 42 17 48" fill="none" stroke="#c9a24b" stroke-width="2"/>
+        <path d="M-10 -38L-22 -43L-10 -32Z" fill="#f1d9c9"/><path d="M10 -38L22 -43L10 -32Z" fill="#f1d9c9"/>
+        <circle cy="-37" r="11" fill="#f7f8fc"/>
+      </g>
+      <path d="M0 150C260 110 480 172 760 140S1080 120 1200 150V200H0Z" fill="#6dbb86"/>
+      <g>
+        <use class="sway" href="#fl" x="40" y="126" width="26" height="50"/><use class="sway" href="#fl" x="118" y="118" width="20" height="40" style="animation-delay:-1s"/>
+        <use class="sway" href="#fl" x="206" y="126" width="28" height="54" style="animation-delay:-2.4s"/><use class="sway" href="#fl" x="300" y="136" width="20" height="40" style="animation-delay:-.7s"/>
+        <use class="sway" href="#fl" x="392" y="142" width="26" height="50" style="animation-delay:-3.1s"/><use class="sway" href="#fl" x="486" y="144" width="20" height="40" style="animation-delay:-1.8s"/>
+        <use class="sway" href="#fl" x="580" y="140" width="28" height="54" style="animation-delay:-.4s"/><use class="sway" href="#fl" x="676" y="134" width="20" height="40" style="animation-delay:-2.9s"/>
+        <use class="sway" href="#fl" x="770" y="124" width="26" height="50" style="animation-delay:-1.3s"/><use class="sway" href="#fl" x="1010" y="112" width="22" height="44" style="animation-delay:-3.6s"/>
+        <use class="sway" href="#fl" x="1090" y="116" width="28" height="54" style="animation-delay:-.2s"/><use class="sway" href="#fl" x="1160" y="124" width="20" height="40" style="animation-delay:-2s"/>
+      </g>
+      <g fill="#eaf3fb"><ellipse class="petal" cx="820" cy="150" rx="5" ry="2.6"/><ellipse class="petal" cx="560" cy="160" rx="4" ry="2.2" style="animation-delay:-4s"/><ellipse class="petal" cx="1080" cy="140" rx="5" ry="2.6" style="animation-delay:-8s"/><ellipse class="petal" cx="320" cy="156" rx="4" ry="2.2" style="animation-delay:-10s"/></g>
+      <path d="M0 180C300 152 620 198 900 172S1120 162 1200 178V200H0Z" fill="#fbfaf5"/>
+    </svg>
   </div>
 </header>
 
 <main>
-  <section id="verify" role="tabpanel" aria-labelledby="tab-verify">
-    <div class="intro verify-intro">
-      <div class="intro-copy">
-        <h2>Check what’s been issued.</h2>
-        <p>Upload the issued PDF or clear photos of every page. Signet checks the seal and compares the printed content, then shows you what it found.</p>
-      </div>
-      <svg class="document-art" viewBox="0 0 400 280" aria-hidden="true" focusable="false">
-        <defs>
-          <linearGradient id="paper" x2="0" y2="1"><stop stop-color="#fff"/><stop offset="1" stop-color="#e6ebeb"/></linearGradient>
-          <linearGradient id="seal" x2="1" y2="1"><stop stop-color="#75c6b3"/><stop offset="1" stop-color="#2c827b"/></linearGradient>
-          <filter id="art-shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#173d52" flood-opacity=".18"/></filter>
-        </defs>
-        <rect x="82" y="43" width="200" height="218" rx="20" fill="#abc9d0" transform="rotate(-11 182 152)"/>
-        <g filter="url(#art-shadow)"><rect x="105" y="26" width="200" height="230" rx="20" fill="url(#paper)"/><path d="M138 71h118M138 91h91M138 125h128M138 145h115M138 165h73" stroke="#a7bac1" stroke-width="9" stroke-linecap="round"/><path d="M137 210h72" stroke="#a7bac1" stroke-width="4" stroke-linecap="round"/></g>
-        <circle cx="284" cy="190" r="58" fill="url(#seal)" stroke="#d6f4e9" stroke-width="7" filter="url(#art-shadow)"/>
-        <path d="m260 190 16 16 32-34" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
+<section id="how">
+  <div class="wrap">
+    <div class="how-track"><div class="how-sticky">
+    <div class="section-head reveal">
+      <p class="kicker">How it works</p>
+      <h2>One spell, four steps.</h2>
+      <p>No thousand-year training arc required. Staff seal a document once; after that anyone can check a copy of it.</p>
     </div>
-    <div id="drop" class="drop" tabindex="0" aria-label="Drop pages of an issued document here">
-      <svg class="upload-art" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect x="9" y="15" width="46" height="42" rx="11" fill="#dcece9"/><path d="M23 42V18a6 6 0 0 1 6-6h13l7 7v23a6 6 0 0 1-6 6H29a6 6 0 0 1-6-6Z" fill="#fff" stroke="#265962" stroke-width="2"/><path d="M42 12v8h7M30 31h13M30 37h10" fill="none" stroke="#5a9293" stroke-width="2" stroke-linecap="round"/></svg>
-      <p class="drop-title">Add a document to verify</p>
-      <p class="muted">Drop an issued PDF or page photos here. PNG, JPG, or PDF; up to 10 files.</p>
-      <div class="row">
-        <button type="button" class="btn primary" id="choose">Choose files</button>
-        <button type="button" class="btn" id="camera">Take photo</button>
-        <button type="button" class="btn" id="webcam" hidden>Use webcam</button>
-        <button type="button" class="btn" id="sample" hidden>Load sample report</button>
-      </div>
-      <input type="file" id="file-in" accept="image/*,application/pdf" multiple hidden>
-      <input type="file" id="cam-in" accept="image/*" capture="environment" hidden>
-    </div>
-    <div id="cam-box" class="cam-box" hidden>
-      <video id="cam-video" autoplay playsinline muted></video>
-      <div class="row">
-        <button type="button" class="btn primary" id="cam-snap">Capture page</button>
-        <button type="button" class="btn" id="cam-stop">Cancel</button>
-      </div>
-    </div>
-    <div id="queue" hidden>
-      <h3>Your pages are ready to check</h3>
-      <ul id="queue-list" class="queue"></ul>
-      <div class="row">
-        <button type="button" class="btn primary" id="go">Verify</button>
-        <button type="button" class="btn" id="add-page">Add another page</button>
-        <button type="button" class="btn" id="clear">Clear</button>
-      </div>
-    </div>
-    <div id="v-status" role="status" aria-live="polite"></div>
-    <div id="report" aria-live="polite"></div>
-  </section>
+    <div class="stage3d"><div class="steps">
+      <article class="step reveal" data-motion>
+        <div class="art" aria-hidden="true"><svg viewBox="0 0 320 220">
+          <rect class="a rise" x="116" y="24" width="88" height="148" rx="5" fill="#fff" stroke="#cdd4e3"/>
+          <g class="a rise"><rect x="128" y="40" width="44" height="5" rx="2.5" fill="#6c7896"/><g fill="#c3cadb"><rect x="128" y="56" width="62" height="4.5" rx="2"/><rect x="128" y="68" width="56" height="4.5" rx="2"/><rect x="128" y="80" width="64" height="4.5" rx="2"/><rect x="128" y="98" width="46" height="4.5" rx="2"/><rect x="128" y="110" width="60" height="4.5" rx="2"/><rect x="128" y="128" width="38" height="4.5" rx="2"/></g></g>
+          <rect class="a draw" style="--len:664" x="94" y="10" width="132" height="200" rx="8" fill="none" stroke="#c9a24b" stroke-width="2.5" stroke-dasharray="664"/>
+          <g fill="#1b2536"><rect class="a pop c" x="100" y="16" width="13" height="13" rx="2"/><rect class="a pop c d1" x="207" y="16" width="13" height="13" rx="2"/><rect class="a pop c d2" x="207" y="191" width="13" height="13" rx="2"/><rect class="a pop c d3" x="100" y="191" width="13" height="13" rx="2"/></g>
+          <g class="a late c" fill="#8d97b3"><rect x="120" y="184" width="46" height="4" rx="2"/><rect x="120" y="193" width="32" height="4" rx="2"/></g>
+          <g class="a pop2 c"><rect x="174" y="178" width="26" height="26" rx="3" fill="#fff" stroke="#1b2536" stroke-width="1.5"/><g fill="#1b2536"><rect x="178" y="182" width="6" height="6"/><rect x="190" y="182" width="6" height="6"/><rect x="178" y="194" width="6" height="6"/><rect x="187" y="190" width="4" height="4"/><rect x="193" y="196" width="3" height="3"/></g></g>
+          <circle class="a ring c" cx="187" cy="191" r="22" fill="none" stroke="#c9a24b" stroke-width="2"/>
+        </svg></div>
+        <div><h3><span>1</span>Seal</h3><p>Staff upload a TXT, DOCX, PDF or XLS file. Aureole turns it into a PDF and frames every page with four corner markers, a signed QR seal and a printed fingerprint.</p></div>
+      </article>
 
-  <section id="issue" role="tabpanel" aria-labelledby="tab-issue" hidden>
-    <div class="section-intro"><h2>Issue a document</h2><p>Create a sealed PDF that others can verify.</p></div>
-    <div class="gate" data-gate hidden></div>
-    <div data-staff hidden>
-      <p class="muted">Seals a TXT, DOCX, PDF or XLS/XLSX file into a framed PDF and records it in the registry.</p>
-      <form id="issue-form" class="form">
-        <label>File <input type="file" name="file" id="issue-file" accept=".txt,.docx,.pdf,.xls,.xlsx" required></label>
-        <p class="muted" id="conv-note" hidden>DOCX and XLS need LibreOffice on this machine. PDF and TXT work without it.</p>
-        <label>Title (optional) <input name="title" maxlength="120"></label>
-        <div class="row"><button type="submit" class="btn primary" id="issue-btn">Issue document</button></div>
-      </form>
-      <div id="i-status" role="status" aria-live="polite"></div>
-      <div id="i-result"></div>
-    </div>
-  </section>
+      <article class="step reveal" data-motion>
+        <div class="art" aria-hidden="true"><svg viewBox="0 0 320 220">
+          <g class="a rise"><path d="M52 44Q104 30 158 44V184Q104 170 52 184Z" fill="#fbf6e6" stroke="#c9a24b" stroke-width="1.5"/><path d="M162 44Q216 30 268 44V184Q216 170 162 184Z" fill="#fbf6e6" stroke="#c9a24b" stroke-width="1.5"/><path d="M160 42V186" stroke="#b08a3a" stroke-width="3"/></g>
+          <g class="a drop c"><rect x="80" y="60" width="50" height="70" rx="3" fill="#fff" stroke="#1b2536" stroke-width="1.2"/><g fill="#1b2536"><rect x="83" y="63" width="5" height="5"/><rect x="122" y="63" width="5" height="5"/><rect x="122" y="122" width="5" height="5"/><rect x="83" y="122" width="5" height="5"/></g><g fill="#c3cadb"><rect x="92" y="76" width="26" height="3"/><rect x="92" y="84" width="22" height="3"/><rect x="92" y="92" width="26" height="3"/><rect x="92" y="100" width="16" height="3"/></g></g>
+          <g fill="#8d97b3"><rect class="a write l" x="176" y="62" width="74" height="5" rx="2.5"/><rect class="a write l d1" x="176" y="78" width="60" height="5" rx="2.5"/><rect class="a write l d2" x="176" y="94" width="70" height="5" rx="2.5"/><rect class="a write l d3" x="176" y="110" width="52" height="5" rx="2.5"/><rect class="a write l d4" x="176" y="126" width="66" height="5" rx="2.5"/></g>
+          <g class="a pop2 c"><rect x="88" y="150" width="144" height="27" rx="13.5" fill="#1f2848"/><text x="160" y="168" text-anchor="middle" font-size="11" fill="#ecd391" font-family="ui-monospace,Menlo,Consolas,monospace">365e 8569 ea10 287d</text></g>
+        </svg></div>
+        <div><h3><span>2</span>Record</h3><p>The registry keeps the issued file, its fingerprint and every printed line. A document is legitimate only if this registry has it. Think of it as a grimoire where every entry is one you actually use.</p></div>
+      </article>
 
-  <section id="registry" role="tabpanel" aria-labelledby="tab-registry" hidden>
-    <div class="section-intro"><h2>Registry</h2><p>Review issued documents and signed copies.</p></div>
-    <div class="gate" data-gate hidden></div>
-    <div data-staff hidden>
-      <div class="row spread"><h3>Issued documents</h3><button type="button" class="btn" id="reg-refresh">Refresh</button></div>
-      <div id="r-status" role="status" aria-live="polite"></div>
-      <div id="r-list"></div>
-      <input type="file" id="reissue-in" accept=".txt,.docx,.pdf,.xls,.xlsx" hidden>
-      <input type="file" id="approve-in" accept="image/*,application/pdf" multiple hidden>
+      <article class="step reveal" data-motion>
+        <div class="art" aria-hidden="true"><svg viewBox="0 0 320 220">
+          <rect x="40" y="12" width="240" height="196" rx="14" fill="#2a3152"/>
+          <g class="a flat c">
+            <rect x="106" y="24" width="108" height="172" rx="5" fill="#fff"/>
+            <g fill="#1b2536"><rect x="111" y="29" width="10" height="10" rx="1.5"/><rect x="199" y="29" width="10" height="10" rx="1.5"/><rect x="199" y="181" width="10" height="10" rx="1.5"/><rect x="111" y="181" width="10" height="10" rx="1.5"/><rect x="176" y="168" width="16" height="16" rx="2"/></g>
+            <g fill="#c3cadb"><rect x="126" y="52" width="54" height="5" rx="2.5"/><rect x="126" y="70" width="60" height="5" rx="2.5"/><rect x="126" y="88" width="56" height="5" rx="2.5"/><rect x="126" y="106" width="60" height="5" rx="2.5"/><rect x="126" y="124" width="46" height="5" rx="2.5"/><rect x="126" y="142" width="58" height="5" rx="2.5"/></g>
+            <g fill="none" stroke="#12674e" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="14"><path class="a tick" d="M193 54l3 3 6-7"/><path class="a tick d1" d="M193 72l3 3 6-7"/><path class="a tick d2" d="M193 90l3 3 6-7"/><path class="a tick d3" d="M193 108l3 3 6-7"/><path class="a tick d4" d="M193 126l3 3 6-7"/><path class="a tick d4" d="M193 144l3 3 6-7"/></g>
+          </g>
+          <rect class="a scan" x="98" y="26" width="124" height="7" rx="3.5" fill="#3fb3a4"/>
+        </svg></div>
+        <div><h3><span>3</span>Check</h3><p>Submit the file, or a photo of the printed pages. An identical file is an exact match. A photo is flattened using the corner markers, then every printed line is read and compared with the registry's copy.</p></div>
+      </article>
+
+      <article class="step reveal" data-motion>
+        <div class="art" aria-hidden="true"><svg viewBox="0 0 320 220">
+          <rect class="a rise" x="72" y="16" width="136" height="188" rx="6" fill="#fff" stroke="#cdd4e3"/>
+          <g class="a rise"><rect x="88" y="34" width="62" height="6" rx="3" fill="#6c7896"/><g fill="#c3cadb"><rect x="88" y="54" width="100" height="5" rx="2.5"/><rect x="88" y="68" width="90" height="5" rx="2.5"/><rect x="88" y="94" width="40" height="5" rx="2.5"/><rect x="88" y="140" width="96" height="5" rx="2.5"/><rect x="88" y="154" width="70" height="5" rx="2.5"/></g><text x="133" y="100.5" font-size="10.5" font-weight="700" fill="#1b2536">PHP 98,500</text></g>
+          <rect class="a box" style="--len:268" x="82" y="86" width="116" height="20" rx="4" fill="none" stroke="#a4161a" stroke-width="2.2" stroke-dasharray="268"/>
+          <g class="a late c"><rect x="110" y="111" width="88" height="18" rx="9" fill="#fbe6e6"/><text x="154" y="123.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#a4161a">text changed</text></g>
+          <g class="a late c d3"><circle cx="108" cy="180" r="15" fill="none" stroke="#c0392b" stroke-width="2.5" opacity=".7"/><circle cx="108" cy="180" r="10" fill="none" stroke="#c0392b" stroke-width="1.2" opacity=".7"/><rect x="88" y="160" width="40" height="40" rx="6" fill="none" stroke="#8a4b00" stroke-width="1.6" stroke-dasharray="4 4"/></g>
+          <g class="a slide"><rect x="188" y="164" width="112" height="32" rx="16" fill="#a4161a"/><text x="244" y="185" text-anchor="middle" font-size="12" font-weight="800" fill="#fff" letter-spacing="1.2">MODIFIED</text></g>
+        </svg></div>
+        <div><h3><span>4</span>Explain</h3><p>Aureole boxes each difference and says what kind it is: a changed line, added text, or just a stamp, fold or stain. It reports what it sees. It never says who did it, or why.</p></div>
+      </article>
+    </div></div>
+    <div class="how-bar" aria-hidden="true"><i></i></div>
+    </div></div>
+  </div>
+</section>
+
+<section id="mimic" class="mimic">
+  <div class="wrap">
+    <div class="mimic-grid">
+      <div class="gag reveal">
+        <svg class="chest" viewBox="26 20 188 164" aria-hidden="true">
+          <ellipse cx="120" cy="172" rx="86" ry="7" fill="#27304f" opacity=".14"/>
+          <path d="M46 108Q46 58 120 58Q194 58 194 108Z" fill="#1a0b12"/><circle cx="90" cy="97" r="4.5" fill="#ecd391"/><circle cx="154" cy="97" r="4.5" fill="#ecd391"/>
+          <g class="lid"><path d="M46 108Q46 58 120 58Q194 58 194 108Z" fill="#8a5529"/><path d="M48 98H192" stroke="#c9a24b" stroke-width="7"/><path d="M68 108V72M172 108V72" stroke="#5c3618" stroke-width="11"/><path d="M58 108l8 12 8-12 8 12 8-12 8 12 8-12 8 12 8-12 8 12 8-12 8 12 8-12 8 12 8-12 8 12 8-12Z" fill="#f4f1e8"/></g>
+          <rect x="46" y="106" width="148" height="62" rx="8" fill="#7a4a24"/><rect x="46" y="120" width="148" height="8" fill="#c9a24b"/><rect x="68" y="106" width="11" height="62" fill="#5c3618"/><rect x="161" y="106" width="11" height="62" fill="#5c3618"/>
+          <rect x="109" y="124" width="22" height="26" rx="5" fill="#ecd391"/><circle cx="120" cy="135" r="3.4" fill="#5c3618"/><rect x="118.6" y="135" width="2.8" height="8" fill="#5c3618"/>
+        </svg>
+        <p class="gag-line">A chest can look like treasure. Check what is inside.</p>
+      </div>
+      <div>
+        <div class="section-head reveal">
+          <p class="kicker">What it catches</p>
+          <h2>Treasure, or mimic?</h2>
+          <p>A chest can look exactly right and still bite. Aureole never trusts a seal on its own: it opens the page and compares it with the registry's copy. The registry is where the real answer comes from.</p>
+        </div>
+        <ul class="catches reveal">
+          <li><svg viewBox="0 0 44 44" fill="none" stroke="#b9902f" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="6" width="26" height="32" rx="3"/><path d="M14 14h16M14 20h10M14 32h14"/><rect x="13" y="23" width="18" height="6" rx="2" stroke="#b8322f"/></svg><div><b>One changed digit</b><span>Every printed line is read back and compared, so 48,500 becoming 98,500 is flagged.</span></div></li>
+          <li><svg viewBox="0 0 44 44" fill="none" stroke="#b9902f" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="6" width="26" height="32" rx="3"/><path d="M14 14h16M14 20h12"/><path d="M22 26v8M18 30h8" stroke="#b8322f"/></svg><div><b>Text added to blank paper</b><span>The whole page is protected, not just the lines that were there.</span></div></li>
+          <li><svg viewBox="0 0 44 44" fill="none" stroke="#b9902f" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><rect x="25" y="8" width="11" height="11" rx="2"/><rect x="8" y="25" width="11" height="11" rx="2"/><path d="M26 26h4v4h-4zM32 32h4v4h-4z" stroke="#b8322f"/></svg><div><b>A swapped or added QR code</b><span>Payment codes and other 2D codes on the page are compared with the issued ones.</span></div></li>
+          <li><svg viewBox="0 0 44 44" fill="none" stroke="#b9902f" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="6" y="10" width="20" height="26" rx="3"/><rect x="18" y="6" width="20" height="26" rx="3" stroke="#b8322f"/><circle cx="31" cy="26" r="3.5"/></svg><div><b>A seal copied onto another document</b><span>The seal points at one specific page. Different content under it is the mimic.</span></div></li>
+          <li><svg viewBox="0 0 44 44" fill="none" stroke="#b9902f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="22" cy="22" r="14"/><path d="M22 13v9l6 4"/></svg><div><b>An old or withdrawn version</b><span>Reissued and revoked documents still carry a genuine seal. The registry knows they are no longer current.</span></div></li>
+          <li><svg viewBox="0 0 44 44" fill="none" stroke="#b9902f" stroke-width="2" aria-hidden="true"><circle cx="22" cy="22" r="13"/><circle cx="22" cy="22" r="8.5" stroke-dasharray="3 3"/></svg><div><b>Stamps, folds and stains, as notes</b><span>Wear and office stamps are listed, not treated as tampering. Damage alone is never called a change.</span></div></li>
+        </ul>
+      </div>
     </div>
-  </section>
+  </div>
+</section>
+
+<section id="verdicts">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="kicker">Verdicts</p>
+      <h2>Seven answers, in plain words.</h2>
+      <p>The look is fantasy. The results are not: every report uses one of these, with the exact place it applies.</p>
+    </div>
+    <ul class="verdicts reveal">
+      <li><b class="chip ok">AUTHENTIC</b><span>Nothing differs from what was issued. For the issued file itself this is an exact, byte-for-byte match.</span></li>
+      <li><b class="chip note">AUTHENTIC, WITH NOTES</b><span>The printed text matches. Something else is on the page, such as a stamp, a fold or a signature.</span></li>
+      <li><b class="chip bad">MODIFIED</b><span>A line reads differently, or text or a code was added. The report shows where.</span></li>
+      <li><b class="chip warn">INCONCLUSIVE</b><span>Part of the page couldn't be read, or a page is missing. Try a sharper, full-page photo.</span></li>
+      <li><b class="chip purple">REVOKED</b><span>The seal is genuine, but the issuer has withdrawn or replaced this version.</span></li>
+      <li><b class="chip bad">INVALID SEAL</b><span>The seal wasn't signed by a trusted issuer.</span></li>
+      <li><b class="chip slate">NOT ISSUED</b><span>There is no Aureole seal, or the registry has no matching record. The registry decides.</span></li>
+    </ul>
+  </div>
+</section>
+
+<section id="more" style="padding-top:0">
+  <div class="wrap">
+    <div class="tiles">
+      <div class="tile reveal"><svg viewBox="0 0 52 52" fill="none" stroke="#2f7f76" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="10" y="6" width="32" height="40" rx="4"/><path d="M16 16h20M16 23h14"/><path d="M15 38c4-8 6 4 9-3s4 5 6 0 4 2 7 1" stroke="#c9a24b"/></svg><h3>Signed after issue</h3><p>Staff can review and approve a signed copy. The unsigned original stays valid, and an approval never covers anything added later.</p></div>
+      <div class="tile reveal"><svg viewBox="0 0 52 52" fill="none" stroke="#2f7f76" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 26s8-13 20-13 20 13 20 13-8 13-20 13S6 26 6 26Z"/><circle cx="26" cy="26" r="6"/><path d="M10 44 42 8" stroke="#c9a24b"/></svg><h3>The original stays private</h3><p>Anyone can verify and see where a page differs. Only signed-in staff see the issued text and the original page.</p></div>
+      <div class="tile reveal"><svg viewBox="0 0 52 52" fill="none" stroke="#2f7f76" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="8" y="10" width="36" height="24" rx="4"/><path d="M4 42h44M20 38h12"/><path d="M19 22l5 5 9-10" stroke="#c9a24b"/></svg><h3>Runs on your machine</h3><p>Text reading and change classification both run locally. Nothing is sent to a cloud service, and it works with the Wi-Fi off.</p></div>
+    </div>
+    <div class="limits reveal">
+      <b>What Aureole can't promise yet</b>
+      <ul>
+        <li>Accuracy so far is measured on simulated photos, not on real prints.</li>
+        <li>DOCX and XLS files need LibreOffice on the issuing machine. PDF and TXT don't.</li>
+        <li>A seal proves what a page says. It can't tell which sheet of paper is the original.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="final">
+  <div class="wrap reveal">
+    <h2>The journey doesn't end when the page is issued.</h2>
+    <p>Seal it once. Check it whenever someone asks.</p>
+    <a class="btn gold" href="/app/">Open Aureole</a>
+  </div>
+  <div class="field" aria-hidden="true" style="margin-top:2rem">
+    <svg viewBox="0 0 1200 120" preserveAspectRatio="xMidYMax slice">
+      <path d="M0 70C260 30 480 92 760 60S1080 40 1200 70V120H0Z" fill="#6dbb86"/>
+      <use class="sway" href="#fl" x="150" y="40" width="26" height="50"/><use class="sway" href="#fl" x="420" y="56" width="22" height="44" style="animation-delay:-1.5s"/><use class="sway" href="#fl" x="640" y="52" width="28" height="54" style="animation-delay:-2.6s"/><use class="sway" href="#fl" x="900" y="38" width="22" height="44" style="animation-delay:-.8s"/><use class="sway" href="#fl" x="1080" y="44" width="26" height="50" style="animation-delay:-3.2s"/>
+      <path d="M0 100C300 80 620 116 900 96S1120 90 1200 100V120H0Z" fill="#2c5a48"/>
+    </svg>
+  </div>
+</section>
 </main>
 
-<footer class="foot row spread"><span id="health">Checking status…</span><button type="button" class="btn" id="signout" hidden>Sign out</button></footer>
-<script src="app.js"></script>
+<footer>
+  <div class="wrap">
+    <p><b>Credits.</b> Aureole's calm-fantasy look and its mimic joke are a fan's nod to <i>Frieren: Beyond Journey's End</i>, created by Kanehito Yamada and Tsukasa Abe and published by Shogakukan. No artwork, characters or footage from the series appear here: the chest, the magic circle and every other illustration are original to Aureole. Aureole is not affiliated with or endorsed by the rights holders.</p>
+    <p>We don't accuse, we explain.</p>
+  </div>
+</footer>
+
+<script>
+const clamp = (v) => Math.min(1, Math.max(0, v));
+if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {  // scroll-driven 3D; without it the steps are plain looping cards
+  document.documentElement.classList.add("fx");
+  const track = document.querySelector(".how-track"), ring = track.querySelector(".steps"), faces = [...ring.children];
+  faces.forEach((face, i) => { face.style.setProperty("--i", i); face.classList.remove("reveal"); face.removeAttribute("data-motion"); });
+  let queued = false;
+  const frame = () => {
+    queued = false;
+    const box = track.getBoundingClientRect();
+    const p = clamp(-box.top / (box.height - innerHeight));
+    const s = Math.min(faces.length - 1, -0.45 + p * (faces.length - 0.25));  // which face is in front; the first starts still turning in, the last stays
+    track.style.setProperty("--p", p);
+    ring.style.setProperty("--s", s);
+    faces.forEach((face, i) => face.style.setProperty("--q", clamp((s - i + 0.45) / 0.45)));  // each face's own animation, done as it comes to the front
+  };
+  addEventListener("scroll", () => { if (!queued) { queued = true; requestAnimationFrame(frame); } }, { passive: true });
+  addEventListener("resize", frame);
+  frame();
+}
+const seen = new IntersectionObserver((entries) => entries.forEach((e) => {
+  const node = e.target;
+  if (node.hasAttribute("data-motion")) node.classList.toggle("rest", !e.isIntersecting);  // loops rest while off screen
+  if (e.isIntersecting) node.classList.remove("wait");
+  else if (!node.dataset.shown) node.classList.add("wait");  // only what starts below the fold fades in, once
+  if (e.isIntersecting) node.dataset.shown = "1";
+}), { threshold: 0.08 });  // low, so blocks taller than the screen still reveal
+document.querySelectorAll(".reveal, [data-motion]").forEach((node) => seen.observe(node));
+</script>
 </body>
 </html>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 110" role="img" aria-labelledby="t">
+  <title id="t">50 Years after the death of Himmel the Hero</title>
+  <style>
+    /* Keyframes only set the start, so a viewer that ignores animation shows the finished line. */
+    text { font: italic 28px Georgia, 'Times New Roman', serif; fill: #ecd391; letter-spacing: 1px; animation: appear 2.5s ease-out both; }
+    line { stroke: #ecd391; stroke-dasharray: 240; animation: draw 1.8s 1.8s ease-out both; }
+    @keyframes appear { from { opacity: 0; letter-spacing: 4px; } }
+    @keyframes draw { from { stroke-dashoffset: 240; } }
+    @media (prefers-reduced-motion: reduce) { text, line { animation: none; } }
+  </style>
+  <rect width="720" height="110" rx="10" fill="#1f2848"/>
+  <text x="360" y="58" text-anchor="middle">50 Years after the death of Himmel the Hero</text>
+  <line x1="240" y1="80" x2="480" y2="80"/>
+</svg>

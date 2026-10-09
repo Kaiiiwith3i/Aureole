@@ -1,13 +1,16 @@
-# Signet contracts
+# Aureole contracts
 
 Source of truth for interfaces. **Function signatures live in the module stubs** (`core/*.py`, `devtools/*.py`) and
 the **API shapes live in `app/schemas.py`**; this file holds the rules they share. Don't change a signature: report it.
 
-## What Signet is (v2)
-Staff upload any document (TXT, DOCX, PDF, XLS/XLSX). Signet converts it to PDF, frames every page with a signed seal,
+## What Aureole is (v2)
+Staff upload any document (TXT, DOCX, PDF, XLS/XLSX). Aureole converts it to PDF, frames every page with a signed seal,
 and records it in the registry. A document is legitimate **only if this registry has it**. Anyone can submit the issued
 file, or a photo/scan of its printed pages, and learn whether it matches what was issued and where it differs.
 The six-field `cert-v1` certificate flow is gone.
+The product was called Signet until the Aureole rebrand. Everything a person sees says Aureole; internal names keep the
+old one (`SIGNET_*` settings, the `signet` logger and cookie, the `SG2` seal prefix), because renaming the seal would
+break every page already issued.
 
 ## Conventions
 - Python 3.11, `.venv/bin/python`. Project path may contain spaces: quote it. Run from the repo root.
@@ -65,7 +68,7 @@ OOXML (`vbaProject.bin`), empty document, more than **10 pages**, DOCX/XLS witho
 Reissue = same `doc_id`, next version; earlier active versions become `superseded`.
 
 ## Signed copies
-Anyone holding an issued page may sign it. Staff upload a scanned PDF or all page photos, inspect Signet's comparison,
+Anyone holding an issued page may sign it. Staff upload a scanned PDF or all page photos, inspect Aureole's comparison,
 then explicitly approve the copy. Approval is refused unless every page is present, the seal belongs to an active registry
 record, every readable printed line matches, and no text change is found. At least one visible added mark is required.
 Staff decide whether that mark is the expected signature; image classification does not establish the signer's identity.
@@ -129,10 +132,10 @@ Headlines (page level; the report reuses the deciding page's, prefixed `Page p: 
   An exact approved upload says it is identical to one staff approved. A later scan says the printed text matches and
   its added marks closely match the approved copy; neither claim identifies the signer.
 - MODIFIED: `{k} line(s) on this page don't match the issued document.` / `Text was added to this page that isn't in the issued document.` / `A line on this page looks altered compared with the issued document.` (the visual diff caught it, OCR didn't) / `A QR code or barcode on this page isn't in the issued document.` / more than half the checked lines differ: `The content of this page is different from the document this seal was issued for.`
-- INCONCLUSIVE: `Seal verified, but parts of the page couldn't be read clearly enough to confirm them. Try a sharper photo.` / `This looks like a Signet page, but we couldn't read its seal. Try a flatter, sharper photo.`
+- INCONCLUSIVE: `Seal verified, but parts of the page couldn't be read clearly enough to confirm them. Try a sharper photo.` / `This looks like a Aureole page, but we couldn't read its seal. Try a flatter, sharper photo.`
 - REVOKED: `This seal is genuine, but the issuer replaced this document with version {n}.` / `...but the issuer has revoked this document.`
 - INVALID_SEAL: `This seal wasn't issued by a trusted issuer.`
-- NOT_ISSUED: `No Signet seal was found, so this isn't a document issued by this system.` / `This seal has no matching record in the registry.`
+- NOT_ISSUED: `No Aureole seal was found, so this isn't a document issued by this system.` / `This seal has no matching record in the registry.`
 
 ## Access
 - **Staff** (one shared login): issue, reissue, revoke, list the registry, download issued files, see the full comparison.
@@ -148,7 +151,7 @@ Headlines (page level; the report reuses the deciding page's, prefixed `Page p: 
 - `GET /api/registry` (staff) -> `RegistryEntry[]`; `POST /api/registry/{doc_id}/revoke` (staff) -> `{ok}`; `POST /api/registry/{doc_id}/reissue` (staff) multipart `file`, optional `title` -> `IssueResponse`
 - `POST /api/registry/{doc_id}/approve` (staff) multipart repeatable `files` -> `ApprovalResponse`; `GET /api/registry/{doc_id}/approved` (staff) lists approved copies and their file URLs.
 - `GET /api/health` -> `Health`
-- Static: `/` serves `web/`; `/reports/<report_id>/<i>_{scan,expected,diff,ela}.jpg` (`i` = 1-based position in the upload); `/issued/<doc_id>_v<version>.pdf` (staff).
+- Static: `/` is the landing page (`web/index.html`, plain HTML/CSS/inline SVG, no libraries); the tool is at `/app/` (`web/app/`); `/reports/<report_id>/<i>_{scan,expected,diff,ela}.jpg` (`i` = 1-based position in the upload); `/issued/<doc_id>_v<version>.pdf` (staff).
 - `/approved/<approval_id>/upload_<i>.<ext>` serves stored signed scans to staff only.
 - Errors: FastAPI default `{"detail": ...}`: 400 unreadable upload, 401 not staff, 404 unknown, 413 too large, 422 can't issue.
 

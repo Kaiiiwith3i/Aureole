@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aureole: issue and verify</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%231f2848' stroke='%23ecd391' stroke-width='2'/%3E%3Cpath fill='%23ecd391' d='M12 5l1.5 5.5L19 12l-5.5 1.5L12 19l-1.5-5.5L5 12l5.5-1.5z'/%3E%3C/svg%3E">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/" aria-label="Aureole home">
+    <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="currentColor" d="M12 5l1.5 5.5L19 12l-5.5 1.5L12 19l-1.5-5.5L5 12l5.5-1.5z"/></svg>
+    <div><h1>Aureole</h1><p class="tag">We don't accuse, we explain.</p></div>
+  </a>
+  <div role="tablist" aria-label="Sections" class="tabs">
+    <button role="tab" id="tab-issue" aria-controls="issue" aria-selected="false" tabindex="-1">Issue</button>
+    <button role="tab" id="tab-verify" aria-controls="verify" aria-selected="true">Verify</button>
+    <button role="tab" id="tab-registry" aria-controls="registry" aria-selected="false" tabindex="-1">Registry</button>
+  </div>
+</header>
+
+<main>
+  <section id="verify" role="tabpanel" aria-labelledby="tab-verify">
+    <div class="intro verify-intro">
+      <div class="intro-copy">
+        <h2>Check what’s been issued.</h2>
+        <p>Upload the issued PDF or clear photos of every page. Aureole checks the seal and compares the printed content, then shows you what it found.</p>
+      </div>
+      <svg class="document-art" viewBox="0 0 400 280" aria-hidden="true" focusable="false">
+        <defs>
+          <linearGradient id="paper" x2="0" y2="1"><stop stop-color="#fff"/><stop offset="1" stop-color="#ebeae6"/></linearGradient>
+          <linearGradient id="seal" x2="1" y2="1"><stop stop-color="#d3b568"/><stop offset="1" stop-color="#30407e"/></linearGradient>
+          <filter id="art-shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#1d264c" flood-opacity=".18"/></filter>
+        </defs>
+        <rect x="82" y="43" width="200" height="218" rx="20" fill="#afb6cc" transform="rotate(-11 182 152)"/>
+        <g filter="url(#art-shadow)"><rect x="105" y="26" width="200" height="230" rx="20" fill="url(#paper)"/><path d="M138 71h118M138 91h91M138 125h128M138 145h115M138 165h73" stroke="#aaafbe" stroke-width="9" stroke-linecap="round"/><path d="M137 210h72" stroke="#aaafbe" stroke-width="4" stroke-linecap="round"/></g>
+        <circle cx="284" cy="190" r="58" fill="url(#seal)" stroke="#efeadb" stroke-width="7" filter="url(#art-shadow)"/>
+        <path d="m260 190 16 16 32-34" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div id="drop" class="drop" tabindex="0" aria-label="Drop pages of an issued document here">
+      <svg class="upload-art" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect x="9" y="15" width="46" height="42" rx="11" fill="#ebe7dd"/><path d="M23 42V18a6 6 0 0 1 6-6h13l7 7v23a6 6 0 0 1-6 6H29a6 6 0 0 1-6-6Z" fill="#fff" stroke="#263262" stroke-width="2"/><path d="M42 12v8h7M30 31h13M30 37h10" fill="none" stroke="#606b8d" stroke-width="2" stroke-linecap="round"/></svg>
+      <p class="drop-title">Add a document to verify</p>
+      <p class="muted">Drop an issued PDF or page photos here. PNG, JPG, or PDF; up to 10 files.</p>
+      <div class="row">
+        <button type="button" class="btn primary" id="choose">Choose files</button>
+        <button type="button" class="btn" id="camera">Take photo</button>
+        <button type="button" class="btn" id="webcam" hidden>Use webcam</button>
+        <button type="button" class="btn" id="sample" hidden>Load sample report</button>
+      </div>
+      <input type="file" id="file-in" accept="image/*,application/pdf" multiple hidden>
+      <input type="file" id="cam-in" accept="image/*" capture="environment" hidden>
+    </div>
+    <div id="cam-box" class="cam-box" hidden>
+      <video id="cam-video" autoplay playsinline muted></video>
+      <div class="row">
+        <button type="button" class="btn primary" id="cam-snap">Capture page</button>
+        <button type="button" class="btn" id="cam-stop">Cancel</button>
+      </div>
+    </div>
+    <div id="queue" hidden>
+      <h3>Your pages are ready to check</h3>
+      <ul id="queue-list" class="queue"></ul>
+      <div class="row">
+        <button type="button" class="btn primary" id="go">Verify</button>
+        <button type="button" class="btn" id="add-page">Add another page</button>
+        <button type="button" class="btn" id="clear">Clear</button>
+      </div>
+    </div>
+    <div id="v-status" role="status" aria-live="polite"></div>
+    <div id="report" aria-live="polite"></div>
+  </section>
+
+  <section id="issue" role="tabpanel" aria-labelledby="tab-issue" hidden>
+    <div class="section-intro"><h2>Issue a document</h2><p>Create a sealed PDF that others can verify.</p></div>
+    <div class="gate" data-gate hidden></div>
+    <div data-staff hidden>
+      <p class="muted">Seals a TXT, DOCX, PDF or XLS/XLSX file into a framed PDF and records it in the registry.</p>
+      <form id="issue-form" class="form">
+        <label>File <input type="file" name="file" id="issue-file" accept=".txt,.docx,.pdf,.xls,.xlsx" required></label>
+        <p class="muted" id="conv-note" hidden>DOCX and XLS need LibreOffice on this machine. PDF and TXT work without it.</p>
+        <label>Title (optional) <input name="title" maxlength="120"></label>
+        <div class="row"><button type="submit" class="btn primary" id="issue-btn">Issue document</button></div>
+      </form>
+      <div id="i-status" role="status" aria-live="polite"></div>
+      <div id="i-result"></div>
+    </div>
+  </section>
+
+  <section id="registry" role="tabpanel" aria-labelledby="tab-registry" hidden>
+    <div class="section-intro"><h2>Registry</h2><p>Review issued documents and signed copies.</p></div>
+    <div class="gate" data-gate hidden></div>
+    <div data-staff hidden>
+      <div class="row spread"><h3>Issued documents</h3><button type="button" class="btn" id="reg-refresh">Refresh</button></div>
+      <div id="r-status" role="status" aria-live="polite"></div>
+      <div id="r-list"></div>
+      <input type="file" id="reissue-in" accept=".txt,.docx,.pdf,.xls,.xlsx" hidden>
+      <input type="file" id="approve-in" accept="image/*,application/pdf" multiple hidden>
+    </div>
+  </section>
+</main>
+
+<footer class="foot row spread"><span id="health">Checking status…</span><button type="button" class="btn" id="signout" hidden>Sign out</button></footer>
+<script src="app.js"></script>
+</body>
+</html>

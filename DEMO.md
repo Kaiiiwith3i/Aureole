@@ -1,4 +1,4 @@
-# Signet demo
+# Aureole demo
 
 Run `./run.sh` once, then open the printed local URL. The launcher builds `demo/` and registers its sample documents in the active v2 registry. All names and organisations in the samples are fictional.
 
@@ -13,7 +13,7 @@ Run `./run.sh` once, then open the printed local URL. The launcher builds `demo/
 | `07_superseded.png` | REVOKED | Valid older version replaced by v2 |
 | `08_untrusted_seal.png` | INVALID_SEAL | QR signed by an untrusted key |
 | `09_smudged_line.jpg` | INCONCLUSIVE | Printed line no longer readable |
-| `10_unsealed.png` | NOT_ISSUED | Document without the Signet frame |
+| `10_unsealed.png` | NOT_ISSUED | Document without the Aureole frame |
 
 Try the issued PDF from the Registry for exact digital verification, then upload its rendered page to see page comparison. Sign out and verify again to see the public report without the issued original or expected line text.
 

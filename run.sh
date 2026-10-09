@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Signet: start server with automatic setup.
+# Aureole: start server with automatic setup.
 # Works from any directory; project path may contain spaces.
 
 cd "$(dirname "$0")"
@@ -69,7 +69,7 @@ except Exception:
 ")
 
 echo ""
-echo "Signet server starting on:"
+echo "Aureole server starting on:"
 echo "  http://localhost:$PORT"
 echo "  http://$LAN_IP:$PORT"
 echo ""

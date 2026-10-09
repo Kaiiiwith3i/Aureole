@@ -34,7 +34,7 @@ def test_issue_then_verify_without_network(no_network):
 
 
 def test_ui_has_no_external_urls():
-    for path in [*WEB.glob("*.html"), *WEB.glob("*.js"), *WEB.glob("*.css")]:
+    for path in [*WEB.rglob("*.html"), *WEB.rglob("*.js"), *WEB.rglob("*.css")]:
         urls = [u for u in re.findall(r"""(?:https?:)?//[\w.-]+\.[a-z]{2,}[^\s"'<>)]*""", path.read_text(encoding="utf-8"))
                 if "www.w3.org" not in u]  # SVG/XML namespace identifiers are never fetched
         assert not urls, f"{path.name}: {urls}"

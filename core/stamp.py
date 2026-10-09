@@ -53,7 +53,7 @@ def stamp(content_pdf: bytes, doc_id: str, version: int, private_key: Ed25519Pri
     core.layout: the source page embedded as a form XObject (vector, text stays selectable) fitted into layout.content,
     the four ArUco markers, the QR of seal.make_seal(doc_id, version, p, n, fingerprint(content_pdf), private_key)
     rendered with qr.render_qr, and the footer text inside layout.footer:
-        Signet document <doc_id> v<version> - page <p> of <n>
+        Aureole document <doc_id> v<version> - page <p> of <n>
         Fingerprint <h in groups of 4>
         Issued <issued_on>. Verify this page with the issuing office.
     Markers, QR and footer are drawn in black on white. issued_on is YYYY-MM-DD."""
@@ -78,7 +78,7 @@ def stamp(content_pdf: bytes, doc_id: str, version: int, private_key: Ed25519Pri
             _put_image(out, page, cv2.aruco.generateImageMarker(aruco, mid, layout.MARKER), [x, y, layout.MARKER, layout.MARKER], H)
         text = seal.make_seal(doc_id, version, i + 1, n, h16, private_key)
         _put_image(out, page, qr.render_qr(text, layout.QR), L.qr, H)
-        lines = [f"Signet document {doc_id} v{version} - page {i + 1} of {n}",
+        lines = [f"Aureole document {doc_id} v{version} - page {i + 1} of {n}",
                  "Fingerprint " + " ".join(h16[j:j + 4] for j in range(0, 16, 4)),
                  f"Issued {issued_on}. Verify this page with the issuing office."]
         _put_image(out, page, _footer(lines, (L.footer[2], L.footer[3])), L.footer, H)

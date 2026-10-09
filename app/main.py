@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
 
 
 # docs_url/redoc_url off: FastAPI's doc pages load assets from a CDN, and this app promises zero external URLs.
-app = FastAPI(title="Signet", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(title="Aureole", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 
 @app.middleware("http")
