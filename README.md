@@ -4,8 +4,6 @@
 
 **Seal a document when you issue it. Check any later copy, photo or scan against what you issued, on your own machine.**
 
-Submission for the AppBuildersPH Hackathon 2026 (Local AI).
-
 ## Description
 
 Forged and edited documents are hard to catch by eye: one digit changed in a salary, a name swapped on a certificate, an old version passed off as current. Aureole gives the issuer a way to answer "is this the document we issued?" without sending the document anywhere.
