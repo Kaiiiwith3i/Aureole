@@ -33,6 +33,7 @@ the signed fields. Deterministic: same input -> identical bytes. `date_issued` i
 ## Field result (`core.compare`)
 - normalize: NFKC, strip diacritics, casefold, collapse whitespace, no spaces around punctuation; numeric fields also O->0, I/l->1, S->5, B->8.
 - match: numeric = exact equality after normalization; text = similarity >= 0.90.
+- Near-match guard (`core/pipeline.py`): a text field inside the 0.90 tolerance is still MISMATCH when OCR confidence >= 0.80, its letters/digits differ from the sealed value, and the same engine reads the clean expected render exactly. The tolerance is for OCR noise, not for a one-letter reprint.
 - **MISMATCH only when OCR confidence >= 0.80 and the text doesn't match.** Empty read or lower confidence -> UNREADABLE. Damage must never produce MISMATCH.
 
 ## Finding

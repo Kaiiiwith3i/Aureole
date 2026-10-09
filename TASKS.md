@@ -7,8 +7,8 @@
 - [x] Phase 1D: diff, classify, forensics
 - [x] Phase 1E: web UI on mock report
 - [x] Phase 1F: run scripts + README skeleton
-- [ ] Phase 2: pipeline + API (orchestrator)
-- [ ] Phase 2F: devtools, demo set, classifier training
-- [ ] Phase 2: setup -> train -> demo set -> tests + acceptance
+- [x] Phase 2: pipeline + API (orchestrator)
+- [x] Phase 2F: devtools, demo set, classifier training
+- [x] Phase 2: setup -> train -> demo set -> tests + acceptance
 - [ ] Phase 3: independent QA, fix Critical/Major
 - [ ] Phase 4: README + DEMO.md, clean-shell final run

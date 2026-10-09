@@ -101,6 +101,16 @@ def _label(key: str, zones: dict) -> str:
     return zones[key]["label"] or key.replace("_", " ").title()
 
 
+def _noun(key: str, zones: dict) -> str:
+    """Label for use mid-sentence: "student ID", "general weighted average"."""
+    return _label(key, zones).lower().replace(" id", " ID")
+
+
+def _letters(text: str) -> str:
+    """Normalized letters and digits only, so dropped punctuation or spacing never counts as a different value."""
+    return "".join(c for c in compare.normalize(text) if c.isalnum())
+
+
 def _decide(status: str, current_version, aligned: bool, fields: list[FieldResult], findings: list[Finding], zones: dict) -> tuple[str, str]:
     """(verdict, headline) for a document whose seal verified. Order is the contract's."""
     if status == "superseded":
@@ -114,7 +124,7 @@ def _decide(status: str, current_version, aligned: bool, fields: list[FieldResul
                     and x.field and by_key[x.field].status != "UNREADABLE"), None)
         bad = by_key[hit.field] if hit else None
     if bad is not None:
-        name = _label(bad.key, zones).lower()
+        name = _noun(bad.key, zones)
         if compare.normalize(bad.read) == compare.normalize(bad.signed):  # caught by the visual diff, not by OCR
             return "MISMATCH", f'The printed {name} looks altered compared with the sealed record ("{bad.signed}").'
         return "MISMATCH", f'The printed {name} doesn\'t match the sealed record: sealed "{bad.signed}", printed "{bad.read}".'
@@ -122,7 +132,7 @@ def _decide(status: str, current_version, aligned: bool, fields: list[FieldResul
         return "INCONCLUSIVE", "Seal verified, but we couldn't read the page clearly enough to confirm it. Try a sharper photo."
     unread = next((f for f in fields if f.status == "UNREADABLE"), None)
     if unread is not None:
-        return "INCONCLUSIVE", f"Seal verified, but we couldn't read {_label(unread.key, zones).lower()} clearly enough to confirm it. Try a sharper photo."
+        return "INCONCLUSIVE", f"Seal verified, but we couldn't read the {_noun(unread.key, zones)} clearly enough to confirm it. Try a sharper photo."
     notes = [x for x in findings if x.type != "unknown" and x.confidence >= NOTE_CONF]
     if notes:
         if any(x.field for x in notes):
@@ -212,8 +222,14 @@ def verify(data: bytes, filename: str = "upload") -> Report:
         x, y, w, h = z["bbox"]
         read = ocr.read_text(scan[y - m:y + h + m, x - m:x + w + m])
         result = compare.compare_field(signed.fields[key], read.text, read.confidence, z["numeric"])
+        status = result.status
+        # The 0.90 tolerance exists for OCR noise. A confident reading whose letters differ from the sealed value
+        # ("Santos" -> "Santoz") is not noise if the same engine reads the clean render exactly: that is a reprint.
+        if (status == "MATCH" and read.confidence >= compare.CONF_MIN and _letters(read.text) != _letters(signed.fields[key])
+                and _letters(ocr.read_text(expected[y - m:y + h + m, x - m:x + w + m]).text) == _letters(signed.fields[key])):
+            status = "MISMATCH"
         report.fields.append(FieldResult(
-            key=key, label=_label(key, zones), signed=signed.fields[key], read=read.text, status=result.status,
+            key=key, label=_label(key, zones), signed=signed.fields[key], read=read.text, status=status,
             similarity=round(result.similarity, 3), confidence=round(read.confidence, 3)))
     lap("ocr")
 
@@ -230,7 +246,7 @@ def verify(data: bytes, filename: str = "upload") -> Report:
     for i, region in enumerate(regions, 1):
         kind, conf = classify.classify(classify.extract_features(scan, expected, region, zone_boxes, ela))
         field = _zone_of(region, zones)
-        where = f"over the {_label(field, zones).lower()} field" if field else "outside the protected areas"
+        where = f"over the {_noun(field, zones)} field" if field else "outside the protected areas"
         severity = "info" if not field else "critical" if kind == "text_change" else "warning"
         report.findings.append(Finding(
             id=f"f{i}", type=kind, bbox=[int(v) for v in region.bbox], field=field, severity=severity,
@@ -241,7 +257,7 @@ def verify(data: bytes, filename: str = "upload") -> Report:
         if f.status == "MISMATCH" and not any(x.field == f.key and x.type == "text_change" for x in report.findings):
             report.findings.append(Finding(
                 id=f"m-{f.key}", type="text_change", bbox=list(zones[f.key]["bbox"]), field=f.key, severity="critical",
-                confidence=f.confidence, message=f'The printed {f.label.lower()} reads "{f.read}", but the sealed value is "{f.signed}".'))
+                confidence=f.confidence, message=f'The printed {_noun(f.key, zones)} reads "{f.read}", but the sealed value is "{f.signed}".'))
     severity_rank = {"critical": 0, "warning": 1, "info": 2}
     report.findings.sort(key=lambda x: (x.type == "unknown", severity_rank[x.severity], -x.confidence))
 
