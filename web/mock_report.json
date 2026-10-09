@@ -1,0 +1,31 @@
+{
+  "report_id": "mock0001",
+  "filename": "05_grade_edited.png",
+  "verdict": "MISMATCH",
+  "headline": "The printed grade doesn't match the sealed record: sealed \"1.75\", printed \"1.25\".",
+  "doc_id": "a1b2c3d4",
+  "version": 1,
+  "current_version": null,
+  "kid": "9f3c2a71",
+  "registry_status": "active",
+  "fields": [
+    {"key": "name", "label": "Name", "signed": "Maria Clara D. Santos", "read": "Maria Clara D. Santos", "status": "MATCH", "similarity": 1.0, "confidence": 0.99},
+    {"key": "student_id", "label": "Student ID", "signed": "2022-00123", "read": "", "status": "UNREADABLE", "similarity": 0.0, "confidence": 0.31},
+    {"key": "grade", "label": "General Weighted Average", "signed": "1.75", "read": "1.25", "status": "MISMATCH", "similarity": 0.75, "confidence": 0.98},
+    {"key": "program", "label": "Program", "signed": "BS Computer Science", "read": "BS Computer Science", "status": "MATCH", "similarity": 1.0, "confidence": 0.99},
+    {"key": "award", "label": "Award", "signed": "With High Honors", "read": "With High Honors", "status": "MATCH", "similarity": 1.0, "confidence": 0.98},
+    {"key": "date_issued", "label": "Date Issued", "signed": "2026-03-28", "read": "2026-03-28", "status": "MATCH", "similarity": 1.0, "confidence": 0.99}
+  ],
+  "findings": [
+    {"id": "f1", "type": "text_change", "bbox": [900, 740, 420, 84], "field": "grade", "severity": "critical", "confidence": 0.98, "message": "The grade printed here differs from the sealed value."},
+    {"id": "f2", "type": "stamp", "bbox": [1680, 640, 250, 250], "field": null, "severity": "info", "confidence": 0.93, "message": "A stamp was added outside the protected areas."},
+    {"id": "f3", "type": "handwriting", "bbox": [900, 1225, 480, 110], "field": null, "severity": "info", "confidence": 0.88, "message": "Handwriting was added outside the protected areas."},
+    {"id": "f4", "type": "physical_damage", "bbox": [150, 730, 420, 120], "field": "student_id", "severity": "warning", "confidence": 0.81, "message": "A stain or smudge covers part of the student ID."},
+    {"id": "f5", "type": "fold", "bbox": [1160, 30, 18, 1590], "field": null, "severity": "info", "confidence": 0.77, "message": "A fold crease runs down the page."},
+    {"id": "f6", "type": "unknown", "bbox": [420, 1480, 40, 22], "field": null, "severity": "info", "confidence": 0.35, "message": "Minor difference, likely capture noise."}
+  ],
+  "notes": [],
+  "timings": {"load": 41.2, "qr": 58.0, "seal": 0.6, "align": 112.4, "render": 96.3, "ocr": 310.8, "diff": 205.1, "classify": 18.9, "forensics": 140.5, "write": 88.0, "total": 1071.8},
+  "images": {"scan": null, "expected": null, "diff": null, "ela": null},
+  "image_size": [2339, 1654]
+}

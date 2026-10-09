@@ -1,0 +1,10 @@
+.venv/
+keys/
+runtime/
+demo/
+models/
+__pycache__/
+qa_scratch/
+.pytest_cache/
+*.pyc
+.DS_Store
