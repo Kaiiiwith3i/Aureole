@@ -29,6 +29,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Signet", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 
+@app.middleware("http")
+async def revalidate(request, call_next):
+    """Local app: always revalidate, so an updated UI or a re-issued file is never served stale from the browser cache."""
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 def _urls(doc_id: str, version: int) -> dict:
     return {"png_url": f"/issued/{doc_id}_v{version}.png", "pdf_url": f"/issued/{doc_id}_v{version}.pdf"}
 

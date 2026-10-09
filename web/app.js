@@ -299,9 +299,9 @@ function entryCard(en) {
   ] : [];
   return el("article", { class: "entry" },
     el("div", { class: "row spread" }, el("span", { class: "t", text: f.name }), chip(en.status, en.status)),
-    el("div", { class: "d", text: `Student ID ${f.student_id} | ${en.doc_id} v${en.version} | issued ${en.issued_at}` }),
+    el("div", { class: "d", text: `Student ID ${f.student_id} | ${en.doc_id} v${en.version} | issued ${new Date(en.issued_at).toLocaleString()}` }),
     el("div", { class: "row" },
-      el("a", { href: en.png_url, text: "PNG" }), el("a", { href: en.pdf_url, text: "PDF" }), actions));
+      el("a", { class: "btn", href: en.png_url, text: "PNG" }), el("a", { class: "btn", href: en.pdf_url, text: "PDF" }), actions));
 }
 
 /* ---------- health ---------- */

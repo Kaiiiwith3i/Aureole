@@ -1,7 +1,9 @@
 """Pydantic models = the API contract. Mirrors CONTRACTS.md."""
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from datetime import date
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Verdict = Literal["AUTHENTIC", "AUTHENTIC_WITH_NOTES", "MISMATCH", "INCONCLUSIVE", "REVOKED", "INVALID_SEAL", "NO_SEAL"]
 FieldStatus = Literal["MATCH", "MISMATCH", "UNREADABLE"]
@@ -12,12 +14,20 @@ RegistryStatus = Literal["active", "revoked", "superseded", "unknown"]
 
 class CertFields(BaseModel):
     # Length caps keep the seal within QR version 20 (see CONTRACTS.md).
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     name: str = Field(min_length=1, max_length=60)
     student_id: str = Field(min_length=1, max_length=20)
     program: str = Field(min_length=1, max_length=60)
     award: str = Field(min_length=1, max_length=40)
     grade: str = Field(min_length=1, max_length=8)
     date_issued: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+    @field_validator("date_issued")
+    @classmethod
+    def _real_date(cls, v: str) -> str:
+        date.fromisoformat(v)  # ValueError for 2026-13-45
+        return v
 
 
 class IssueResponse(BaseModel):

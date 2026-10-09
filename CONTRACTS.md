@@ -34,20 +34,23 @@ the signed fields. Deterministic: same input -> identical bytes. `date_issued` i
 - normalize: NFKC, strip diacritics, casefold, collapse whitespace, no spaces around punctuation; numeric fields also O->0, I/l->1, S->5, B->8.
 - match: numeric = exact equality after normalization; text = similarity >= 0.90.
 - Near-match guard (`core/pipeline.py`): a text field inside the 0.90 tolerance is still MISMATCH when OCR confidence >= 0.80, its letters/digits differ from the sealed value, and the same engine reads the clean expected render exactly. The tolerance is for OCR noise, not for a one-letter reprint.
+- Ink-only reading (`core/pipeline.py`): coloured pixels (stamp ink, ballpoint, stains) are painted white before OCR, because sealed values are printed in black.
+- Covered field: if a field would be MISMATCH but a known non-text finding (stamp, handwriting, physical_damage, fold; confidence >= 0.6) lies on its zone, it becomes UNREADABLE with a note. Junk characters from a mark are damage, not an edit.
+- Read-back at issue: a certificate is only issued if every field of the fresh render reads back as MATCH (rejects glyphs the font lacks, scripts the OCR can't read, blanks) -> `ValueError` / HTTP 422.
 - **MISMATCH only when OCR confidence >= 0.80 and the text doesn't match.** Empty read or lower confidence -> UNREADABLE. Damage must never produce MISMATCH.
 
 ## Finding
 `{id, type, bbox, field, severity, confidence, message}` (see `app/schemas.py`).
 - type: `stamp | handwriting | physical_damage | fold | text_change | digital_edit | unknown`. The classifier emits the first five + `unknown`; `digital_edit` comes only from forensics.
 - severity: `text_change` on a protected zone -> `critical`; any other type on a protected zone -> `warning`; elsewhere -> `info`.
-- Every MISMATCH field gets a `critical` `text_change` finding on its zone bbox.
+- Every MISMATCH field gets a `critical` `text_change` finding on its zone bbox. A critical finding's bbox always covers the whole zone, and there is at most one per field.
 - message: one plain sentence, no accusations ("modified", never "forged"/"fake"/"fraud").
 
 ## Verdicts (first rule that applies)
 1. `INVALID_SEAL`: a QR was found but it is not a valid SG1 seal, the signature fails, or `kid` isn't trusted.
 2. `REVOKED`: registry status `revoked` or `superseded` (`current_version` set when superseded).
 3. `MISMATCH`: a field is MISMATCH, or a `text_change` finding (confidence >= 0.6) overlaps a protected zone whose field is not UNREADABLE.
-4. `INCONCLUSIVE`: alignment failed, or any field is UNREADABLE.
+4. `INCONCLUSIVE`: alignment failed, or any field is UNREADABLE. Also: the corner markers were found but the seal could not be read even after flattening the page (it is a Signet certificate, so NO_SEAL would be wrong).
 5. `AUTHENTIC_WITH_NOTES`: all fields MATCH and >= 1 finding of a known type (not `unknown`) has confidence >= 0.6.
 6. `AUTHENTIC`: all fields MATCH; `unknown`/low-confidence regions are listed as minor differences.
 7. `NO_SEAL`: no QR found; forensic findings only (`digital_edit`, bbox in input-image px, `image_size` = input size).
@@ -72,7 +75,7 @@ Headlines:
 - Report image URLs may be `null` (e.g. no `expected`/`diff` on NO_SEAL). All four images share `image_size`.
 
 ## Verification pipeline (`core/pipeline.py`)
-load (PDF first page @200 DPI; downscale > 3000 px) -> `qr.decode_qr` -> none: forensics only (ELA + copy-move) -> `NO_SEAL`
+load (PDF first page @200 DPI; downscale > 3000 px) -> `qr.decode_qr` (if none: flatten with the markers and retry) -> still none and no markers: forensics only (ELA + copy-move) -> `NO_SEAL`
 -> `seal.verify_seal` + registry -> `align.align` (ArUco >= 3 markers, else QR corners) -> `template.render_certificate`
 -> per zone `ocr.read_text` on the crop (+8 px margin) and `compare.compare_field` -> `diff.diff_regions` (ignoring markers + QR box)
 -> `classify.extract_features` + `classify.classify` -> ELA warped to template space -> verdict -> images -> Report.

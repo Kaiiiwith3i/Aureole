@@ -37,6 +37,11 @@ def _publish(doc_id: str, version: int, fields: dict[str, str]) -> dict:
     key, kid = seal.load_or_create_issuer_key()
     text = seal.make_seal(fields, doc_id, version, key)
     image = template.render_certificate(fields, {"seal": text, "doc_id": doc_id, "version": version})
+    # Never issue a certificate that would fail its own verification (glyphs the font lacks, scripts the OCR can't read, blanks).
+    unreadable = [f.label for f in _read_fields(image, image, fields, template.zones()) if f.status != "MATCH"]
+    if unreadable:
+        raise ValueError(f"Can't issue this certificate: {', '.join(unreadable)} wouldn't read back reliably from the printed page. "
+                         "Use Latin letters, digits and common punctuation.")
     out = data_dir() / "issued"
     out.mkdir(exist_ok=True)
     png, pdf = out / f"{doc_id}_v{version}.png", out / f"{doc_id}_v{version}.pdf"
@@ -67,13 +72,17 @@ def revoke(doc_id: str) -> bool:
 # ---------------------------------------------------------------- verifying
 
 def _load(data: bytes) -> np.ndarray:
-    if data[:5] == b"%PDF-":
-        import pypdfium2 as pdfium
+    image = None
+    try:
+        if data[:5] == b"%PDF-":
+            import pypdfium2 as pdfium
 
-        page = pdfium.PdfDocument(data)[0]
-        image = np.array(page.render(scale=200 / 72).to_pil().convert("RGB"))[:, :, ::-1].copy()
-    else:
-        image = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+            page = pdfium.PdfDocument(data)[0]
+            image = np.array(page.render(scale=200 / 72).to_pil().convert("RGB"))[:, :, ::-1].copy()
+        elif data:
+            image = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+    except Exception:  # empty, truncated or corrupt upload: the decoders raise their own error types
+        image = None
     if image is None or image.size == 0:
         raise ValueError("This file isn't a readable PNG, JPG or PDF.")
     scale = MAX_SIDE / max(image.shape[:2])
@@ -109,6 +118,33 @@ def _noun(key: str, zones: dict) -> str:
 def _letters(text: str) -> str:
     """Normalized letters and digits only, so dropped punctuation or spacing never counts as a different value."""
     return "".join(c for c in compare.normalize(text) if c.isalnum())
+
+
+def _ink_only(crop: np.ndarray) -> np.ndarray:
+    """The crop with coloured marks (stamp ink, ballpoint, stains) painted white. Sealed values are printed in black,
+    so a red stamp or blue pen stroke lying over a field shouldn't change what OCR reads there."""
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    out = crop.copy()
+    out[(hsv[:, :, 1] > 70) & (hsv[:, :, 2] > 70)] = 255
+    return out
+
+
+def _read_fields(scan: np.ndarray, expected: np.ndarray, signed: dict[str, str], zones: dict) -> list[FieldResult]:
+    """OCR every protected zone of `scan` and compare with the signed values."""
+    m, out = ZONE_MARGIN, []
+    for key, z in zones.items():
+        x, y, w, h = z["bbox"]
+        read = ocr.read_text(_ink_only(scan[y - m:y + h + m, x - m:x + w + m]))
+        result = compare.compare_field(signed[key], read.text, read.confidence, z["numeric"])
+        status = result.status
+        # The 0.90 tolerance exists for OCR noise. A confident reading whose letters differ from the sealed value
+        # ("Santos" -> "Santoz") is not noise if the same engine reads the clean render exactly: that is a reprint.
+        if (status == "MATCH" and read.confidence >= compare.CONF_MIN and _letters(read.text) != _letters(signed[key])
+                and _letters(ocr.read_text(expected[y - m:y + h + m, x - m:x + w + m]).text) == _letters(signed[key])):
+            status = "MISMATCH"
+        out.append(FieldResult(key=key, label=_label(key, zones), signed=signed[key], read=read.text, status=status,
+                               similarity=round(result.similarity, 3), confidence=round(read.confidence, 3)))
+    return out
 
 
 def _decide(status: str, current_version, aligned: bool, fields: list[FieldResult], findings: list[Finding], zones: dict) -> tuple[str, str]:
@@ -171,6 +207,16 @@ def verify(data: bytes, filename: str = "upload") -> Report:
 
     report = Report(report_id=rid, filename=filename, verdict="NO_SEAL", headline="", image_size=[image.shape[1], image.shape[0]])
     code = qr.decode_qr(image)
+    if code is None:  # steep angle or glare can defeat the QR reader while the corner markers still read: flatten, look again
+        flat = align.align(image)
+        if flat is not None:
+            image, code = flat.image, qr.decode_qr(flat.image)
+            report.image_size = [image.shape[1], image.shape[0]]
+            if code is None:  # it is one of ours, so "no seal" (and a forensic guess) would be the wrong thing to say
+                report.verdict = "INCONCLUSIVE"
+                report.headline = "This looks like a Signet certificate, but we couldn't read its seal. Try a flatter, sharper photo."
+                save("scan", image)
+                return done(report)
     lap("qr")
 
     if code is None:  # forensics only
@@ -217,20 +263,7 @@ def verify(data: bytes, filename: str = "upload") -> Report:
     expected = template.render_certificate(signed.fields, {"seal": code.text, "doc_id": signed.doc_id, "version": signed.version})
     lap("render")
 
-    m = ZONE_MARGIN
-    for key, z in zones.items():
-        x, y, w, h = z["bbox"]
-        read = ocr.read_text(scan[y - m:y + h + m, x - m:x + w + m])
-        result = compare.compare_field(signed.fields[key], read.text, read.confidence, z["numeric"])
-        status = result.status
-        # The 0.90 tolerance exists for OCR noise. A confident reading whose letters differ from the sealed value
-        # ("Santos" -> "Santoz") is not noise if the same engine reads the clean render exactly: that is a reprint.
-        if (status == "MATCH" and read.confidence >= compare.CONF_MIN and _letters(read.text) != _letters(signed.fields[key])
-                and _letters(ocr.read_text(expected[y - m:y + h + m, x - m:x + w + m]).text) == _letters(signed.fields[key])):
-            status = "MISMATCH"
-        report.fields.append(FieldResult(
-            key=key, label=_label(key, zones), signed=signed.fields[key], read=read.text, status=status,
-            similarity=round(result.similarity, 3), confidence=round(read.confidence, 3)))
+    report.fields = _read_fields(scan, expected, signed.fields, zones)
     lap("ocr")
 
     size = tpl["markers"]["size"]
@@ -248,11 +281,27 @@ def verify(data: bytes, filename: str = "upload") -> Report:
         field = _zone_of(region, zones)
         where = f"over the {_noun(field, zones)} field" if field else "outside the protected areas"
         severity = "info" if not field else "critical" if kind == "text_change" else "warning"
+        bbox = [int(v) for v in region.bbox]
+        if severity == "critical":  # frame the whole field, not the few glyph fragments that differ
+            zx, zy, zw, zh = zones[field]["bbox"]
+            x0, y0 = min(bbox[0], zx), min(bbox[1], zy)
+            bbox = [x0, y0, max(bbox[0] + bbox[2], zx + zw) - x0, max(bbox[1] + bbox[3], zy + zh) - y0]
+            same = next((x for x in report.findings if x.severity == "critical" and x.field == field), None)
+            if same is not None:  # one critical finding per field: keep the more confident one
+                if same.confidence >= conf:
+                    continue
+                report.findings.remove(same)
         report.findings.append(Finding(
-            id=f"f{i}", type=kind, bbox=[int(v) for v in region.bbox], field=field, severity=severity,
+            id=f"f{i}", type=kind, bbox=bbox, field=field, severity=severity,
             confidence=round(float(conf), 2), message=MESSAGES[kind].format(where=where)))
     lap("classify")
 
+    for f in report.fields:  # a mark lying on a field makes a differing read unreliable: junk characters are damage, not an edit
+        cover = next((x for x in report.findings if x.field == f.key and x.type not in ("text_change", "unknown")
+                      and x.confidence >= NOTE_CONF), None)
+        if f.status == "MISMATCH" and cover is not None:
+            f.status = "UNREADABLE"
+            report.notes.append(f"Something covers the {_noun(f.key, zones)} ({cover.type.replace('_', ' ')}), so its value couldn't be read reliably.")
     for f in report.fields:  # every MISMATCH field is highlighted, whether or not the visual diff caught it
         if f.status == "MISMATCH" and not any(x.field == f.key and x.type == "text_change" for x in report.findings):
             report.findings.append(Finding(

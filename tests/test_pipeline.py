@@ -39,3 +39,39 @@ def test_unregistered_but_trusted_seal_is_verified_with_a_note(monkeypatch, tmp_
     monkeypatch.setenv("SIGNET_DATA_DIR", str(tmp_path / "another_machine"))  # registry that has never seen the document
     report = pipeline.verify(png, "t.png")
     assert report.verdict == "AUTHENTIC" and report.registry_status == "unknown" and report.notes
+
+
+def test_marks_over_a_field_are_never_a_mismatch():
+    """QA finding: a stamp or pen scribble on top of a value made OCR read junk with high confidence."""
+    from core import template
+
+    page = cv2.imread(str(pipeline.issue(FIELDS)["png_path"]))
+    for key in ("student_id", "program", "name"):
+        x, y, w, h = template.zones()[key]["bbox"]
+        cx = x + w // 2 if key == "name" else x + 150
+        for marked in (tamper.add_stamp(page, (cx, y + h // 2), 120, seed=1)[0],
+                       tamper.add_scribble(page, [cx - 200, y - 8, 420, 100], seed=1)[0]):
+            report = _verify(marked, photo_seed=11)
+            assert report.verdict in ("AUTHENTIC_WITH_NOTES", "INCONCLUSIVE"), (key, report.headline)
+            assert not any(f.severity == "critical" for f in report.findings)
+
+
+def test_unprintable_or_unreadable_values_are_refused_at_issue():
+    """QA finding: a name the font can't print was issued and then failed its own verification."""
+    import pytest
+
+    for name in ("王小明", "Иван Петров", "   "):
+        with pytest.raises(ValueError):
+            pipeline.issue({**FIELDS, "name": name})
+    accented = pipeline.issue({**FIELDS, "name": "Zoë Ünal-Peñaflor"})
+    assert pipeline.verify(accented["png_path"].read_bytes()).verdict == "AUTHENTIC"
+
+
+def test_undecodable_uploads_raise_value_error():
+    """QA finding: an empty file and a truncated PDF crashed the request."""
+    import pytest
+
+    pdf = pipeline.issue(FIELDS)["pdf_path"].read_bytes()
+    for data in (b"", pdf[:3000], b"\x00" * 64, b"plain text"):
+        with pytest.raises(ValueError):
+            pipeline.verify(data)

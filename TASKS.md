@@ -10,5 +10,5 @@
 - [x] Phase 2: pipeline + API (orchestrator)
 - [x] Phase 2F: devtools, demo set, classifier training
 - [x] Phase 2: setup -> train -> demo set -> tests + acceptance
-- [ ] Phase 3: independent QA, fix Critical/Major
+- [x] Phase 3: independent QA, fix Critical/Major
 - [ ] Phase 4: README + DEMO.md, clean-shell final run
