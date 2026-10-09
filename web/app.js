@@ -22,7 +22,9 @@ async function api(path, opts) {
   try { body = await res.json(); } catch { /* non-JSON body */ }
   if (!res.ok) {
     const d = body && body.detail;
-    throw new Error(typeof d === "string" ? d : d ? "The server rejected the request: " + JSON.stringify(d) : `Server error (${res.status}).`);
+    const err = new Error(typeof d === "string" ? d : d ? "The server rejected the request: " + JSON.stringify(d) : `Server error (${res.status}).`);
+    err.status = res.status;
+    throw err;
   }
   return body;
 }
@@ -38,7 +40,7 @@ function showTab(t) {
     b.tabIndex = on ? 0 : -1;
     $(b.getAttribute("aria-controls")).hidden = !on;
   });
-  if (t.id === "tab-registry") loadRegistry();
+  if (t.id === "tab-registry" && staff) loadRegistry();
 }
 tabs.forEach((t, i) => {
   t.addEventListener("click", () => showTab(t));
@@ -50,38 +52,90 @@ tabs.forEach((t, i) => {
   });
 });
 
+/* ---------- staff sign-in ---------- */
+let staff = false;
+function setStaff(on) {
+  const was = staff;
+  staff = on;
+  document.querySelectorAll("[data-gate]").forEach((g) => { g.hidden = on; });
+  document.querySelectorAll("[data-staff]").forEach((g) => { g.hidden = !on; });
+  $("signout").hidden = !on;
+  if (was && !on) {
+    $("r-list").replaceChildren(); $("i-result").replaceChildren();
+    say("r-status", ""); say("i-status", ""); $("report").replaceChildren(); // reports may hold issued text
+  }
+  if (on && !$("registry").hidden) loadRegistry();
+}
+document.querySelectorAll("[data-gate]").forEach((g, n) => {
+  const msg = el("div", { role: "status", "aria-live": "polite" });
+  const pw = el("input", { type: "password", id: "pw" + n, autocomplete: "current-password", required: "" });
+  g.append(el("form", { class: "form", onsubmit: async (e) => {
+    e.preventDefault();
+    msg.replaceChildren();
+    try { await post("/api/login", { password: pw.value }); pw.value = ""; setStaff(true); }
+    catch (err) { msg.replaceChildren(el("div", { class: "err", text: err.status === 401 ? "Wrong password." : "Couldn't sign in. " + err.message })); }
+  } },
+  el("p", { class: "muted", text: "Staff only. Sign in to continue." }),
+  el("label", { for: "pw" + n, text: "Staff password" }), pw,
+  el("div", { class: "row" }, el("button", { type: "submit", class: "btn primary", text: "Sign in" })), msg));
+});
+$("signout").onclick = async () => { try { await post("/api/logout", {}); } catch { /* cookie may already be gone */ } setStaff(false); };
+// a 401 from any staff call means the session ended
+const staffCall = (e) => { if (e.status === 401) setStaff(false); };
+api("/api/me").then((m) => setStaff(!!m.staff), () => setStaff(false));
+
 /* ---------- verify ---------- */
 const MOCK = new URLSearchParams(location.search).has("mock");
+const MAX_FILES = 10;
 let busy = false;
+let queue = [];
 
-async function verify(file) {
-  if (busy) return;
+function renderQueue() {
+  $("queue").hidden = !queue.length;
+  $("queue-list").replaceChildren(...queue.map((f, i) => el("li", {},
+    el("span", { text: f.name || "capture" }),
+    el("button", { type: "button", class: "btn", "aria-label": "Remove " + (f.name || "capture"), text: "Remove", onclick: () => { queue.splice(i, 1); renderQueue(); } }))));
+  $("add-page").hidden = queue.length >= MAX_FILES;
+}
+function addFiles(list) {
+  const room = MAX_FILES - queue.length;
+  const add = [...list].slice(0, room);
+  queue.push(...add);
+  say("v-status", list.length > room ? `Only ${MAX_FILES} files can be checked at once. Extra files were left out.` : "", "err");
+  renderQueue();
+  if (add.length) $("go").focus();
+}
+
+async function verify() {
+  if (busy || !queue.length) return;
   busy = true;
+  $("go").disabled = true;
   $("report").replaceChildren();
-  say("v-status", "Verifying " + (file.name || "capture") + " offline…", "busy");
+  say("v-status", `Verifying ${queue.length} file${queue.length > 1 ? "s" : ""} offline…`, "busy");
   try {
     const fd = new FormData();
-    fd.append("file", file, file.name || "webcam.jpg");
+    queue.forEach((f) => fd.append("files", f, f.name || "capture.jpg"));
     const r = await api("/api/verify", { method: "POST", body: fd });
     say("v-status", "");
+    queue = []; renderQueue();
     renderReport(r);
   } catch (e) {
     say("v-status", "Verification failed. " + e.message, "err");
-  } finally { busy = false; }
+  } finally { busy = false; $("go").disabled = false; }
 }
+$("go").onclick = verify;
+$("clear").onclick = () => { queue = []; renderQueue(); say("v-status", ""); };
 
-const pick = (input) => input.addEventListener("change", () => { if (input.files[0]) verify(input.files[0]); input.value = ""; });
+const pick = (input) => input.addEventListener("change", () => { addFiles(input.files); input.value = ""; });
 pick($("file-in")); pick($("cam-in"));
 $("choose").onclick = () => $("file-in").click();
 $("camera").onclick = () => $("cam-in").click();
+$("add-page").onclick = () => $("cam-in").click();
 
 const drop = $("drop");
 drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
-drop.addEventListener("drop", (e) => {
-  e.preventDefault(); drop.classList.remove("over");
-  if (e.dataTransfer.files[0]) verify(e.dataTransfer.files[0]);
-});
+drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); addFiles(e.dataTransfer.files); });
 drop.addEventListener("keydown", (e) => { if (e.target === drop && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); $("file-in").click(); } });
 
 /* webcam: only offered in a secure context (localhost) */
@@ -103,7 +157,7 @@ if (window.isSecureContext && navigator.mediaDevices?.getUserMedia) {
     const c = el("canvas");
     c.width = v.videoWidth; c.height = v.videoHeight;
     c.getContext("2d").drawImage(v, 0, 0);
-    c.toBlob((b) => { stopCam(); if (b) verify(new File([b], "webcam.jpg", { type: "image/jpeg" })); }, "image/jpeg", 0.92);
+    c.toBlob((b) => { stopCam(); if (b) addFiles([new File([b], `webcam-${queue.length + 1}.jpg`, { type: "image/jpeg" })]); }, "image/jpeg", 0.92);
   };
 }
 
@@ -121,18 +175,17 @@ if (MOCK) {
 const VERDICTS = {
   AUTHENTIC: ["Authentic", "M5 12.5l4.5 4.5L19 7.5"],
   AUTHENTIC_WITH_NOTES: ["Authentic, with notes", "M5 12.5l4.5 4.5L19 7.5 M12 21v0"],
-  MISMATCH: ["Mismatch", "M6 6l12 12M18 6L6 18"],
+  MODIFIED: ["Modified", "M6 6l12 12M18 6L6 18"],
   INCONCLUSIVE: ["Inconclusive", "M9 9a3 3 0 1 1 4.5 2.6c-1 .6-1.5 1.2-1.5 2.4M12 17.5v.5"],
   REVOKED: ["Revoked", "M5.5 5.5l13 13"],
   INVALID_SEAL: ["Invalid seal", "M12 8v5M12 16.5v.5"],
-  NO_SEAL: ["No seal", "M7 12h10"],
+  NOT_ISSUED: ["Not issued", "M7 12h10"],
 };
-const LAYERS = [["scan", "Scan"], ["expected", "Expected"], ["diff", "Differences"], ["ela", "ELA"]];
-const TYPE_LABEL = { text_change: "Text change", digital_edit: "Digital edit", physical_damage: "Physical damage", handwriting: "Handwriting", stamp: "Stamp", fold: "Fold", unknown: "Unknown" };
-const FIELD_LABEL = { name: "Name", student_id: "Student ID", program: "Program", award: "Award", grade: "Grade", date_issued: "Date issued" };
+const LAYERS = [["scan", "Scan"], ["expected", "Issued original"], ["diff", "Differences"], ["ela", "Error-level"]];
+const TYPE_LABEL = { text_change: "Text change", physical_damage: "Physical damage", handwriting: "Handwriting", stamp: "Stamp", fold: "Fold", unknown: "Unknown" };
 
 function icon(verdict) {
-  const [, d] = VERDICTS[verdict] || VERDICTS.NO_SEAL;
+  const [, d] = VERDICTS[verdict] || VERDICTS.NOT_ISSUED;
   const s = document.createElementNS(NS, "svg");
   s.setAttribute("viewBox", "0 0 24 24");
   s.setAttribute("aria-hidden", "true");
@@ -145,13 +198,15 @@ function icon(verdict) {
 }
 const chip = (cls, text) => el("span", { class: "chip s-" + cls, text });
 const pct = (x) => Math.round(x * 100) + "%";
+const vlabel = (v) => (VERDICTS[v] || [v])[0];
 
 function renderReport(r) {
-  const [label] = VERDICTS[r.verdict] || [r.verdict];
+  const label = vlabel(r.verdict);
+  const checked = r.pages_checked && r.pages_checked.length ? r.pages_checked.join(", ") + (r.pages_total ? " of " + r.pages_total : "") : null;
   const meta = [
     ["File", r.filename], ["Doc", r.doc_id],
     ["Version", r.version != null ? "v" + r.version + (r.current_version && r.current_version !== r.version ? " (current v" + r.current_version + ")" : "") : null],
-    ["Issuer", r.kid], ["Registry", r.registry_status],
+    ["Registry", r.registry_status], ["Pages checked", checked],
     ["Time", r.timings && r.timings.total != null ? Math.round(r.timings.total) + " ms" : null],
   ].filter(([, v]) => v);
 
@@ -162,41 +217,72 @@ function renderReport(r) {
     el("ul", { class: "meta" }, meta.map(([k, v]) => el("li", {}, k + ": ", el("b", { text: v })))),
   ];
   if (r.notes && r.notes.length) out.push(el("ul", { class: "notes" }, r.notes.map((n) => el("li", { text: n }))));
-  if (r.fields && r.fields.length) out.push(el("h3", { text: "Protected fields" }), fieldTable(r.fields));
-  out.push(el("h3", { text: "Where it differs" }), viewer(r));
+  if (r.mode === "digital") {
+    out.push(el("p", { class: "muted", text: r.verdict === "REVOKED"
+      ? "This file is byte-identical to a file Signet issued, but that document has since been revoked or replaced."
+      : "This file is byte-identical to the issued file. No page analysis was needed." }));
+  } else if (r.pages && r.pages.length) {
+    out.push(pagesView(r.pages));
+  }
   out.push(el("p", { class: "disclaimer", text: "Signet explains what changed. A person makes the final decision." }));
   $("report").replaceChildren(...out);
   $("report").scrollIntoView({ block: "start", behavior: "smooth" });
 }
 
-function fieldTable(fields) {
-  const head = ["Field", "Signed value", "Printed value", "Status", "Confidence"];
-  return el("table", { class: "stack" },
-    el("thead", {}, el("tr", {}, head.map((h) => el("th", { scope: "col", text: h })))),
-    el("tbody", {}, fields.map((f) => el("tr", {},
-      el("td", { "data-label": head[0], text: f.label }),
-      el("td", { "data-label": head[1], text: f.signed }),
-      el("td", { "data-label": head[2], text: f.read || "(not read)" }),
-      el("td", { "data-label": head[3] }, chip(f.status, f.status)),
-      el("td", { "data-label": head[4], text: pct(f.confidence) })))));
+function pagesView(pages) {
+  const holder = el("div", {});
+  const btns = pages.map((p, i) => el("button", { type: "button", class: "pg v-" + p.verdict, "aria-pressed": "false",
+    "aria-label": `Page ${p.page != null ? p.page : "unknown"}, ${vlabel(p.verdict)}`, text: p.page != null ? String(p.page) : "?",
+    onclick: () => show(i) }));
+  const show = (i) => {
+    btns.forEach((b, k) => b.setAttribute("aria-pressed", k === i));
+    holder.replaceChildren(pageView(pages[i]));
+  };
+  show(0);
+  return el("div", {},
+    pages.length > 1 ? el("div", { class: "pages", role: "group", "aria-label": "Pages" }, el("span", { class: "muted", text: "Page:" }), btns) : null,
+    holder);
 }
 
-function viewer(r) {
-  const [w, h] = r.image_size;
-  const imgs = r.images || {};
+function pageView(p) {
+  const hasExpected = p.lines.some((l) => l.expected != null);
+  const out = [
+    el("div", { class: "pagehead v-" + p.verdict },
+      el("span", { class: "chip", text: vlabel(p.verdict) }),
+      el("span", { class: "ph-t", text: p.headline })),
+    el("p", { class: "muted", text: `${p.lines_matched} of ${p.lines_total} lines match, ${p.lines_unchecked} not machine-checkable.` }),
+  ];
+  if (p.notes && p.notes.length) out.push(el("ul", { class: "notes" }, p.notes.map((n) => el("li", { text: n }))));
+  out.push(el("h3", { text: "Where it differs" }), viewer(p));
+  if (p.lines.length) {
+    const head = ["Status", "What was read"].concat(hasExpected ? ["Issued text"] : []);
+    out.push(el("h3", { text: "Lines that don't match" }),
+      el("table", { class: "stack" },
+        el("thead", {}, el("tr", {}, head.map((h) => el("th", { scope: "col", text: h })))),
+        el("tbody", {}, p.lines.map((l) => el("tr", {},
+          el("td", { "data-label": head[0] }, chip(l.status, l.status)),
+          el("td", { "data-label": head[1], text: l.read || "(not read)" }),
+          hasExpected ? el("td", { "data-label": head[2], text: l.expected != null ? l.expected : "" }) : null)))));
+    if (!hasExpected && !staff) out.push(el("p", { class: "muted", text: "Sign in as staff to see the issued text." }));
+  }
+  return el("div", {}, out);
+}
+
+function viewer(p) {
+  const [w, h] = p.image_size;
+  const imgs = p.images || {};
   const stage = el("div", { class: "stage", style: `aspect-ratio:${w}/${h}` });
   const boxes = {}, items = {};
-  let layer = imgs.scan ? "scan" : LAYERS.map((l) => l[0]).find((k) => imgs[k]) || "scan";
+  const avail = LAYERS.filter(([k]) => imgs[k]);
 
   const setLayer = (k) => {
-    layer = k;
     stage.querySelectorAll("img,.ph").forEach((n) => n.remove());
-    stage.prepend(imgs[k]
-      ? el("img", { src: imgs[k], alt: LAYERS.find((l) => l[0] === k)[1] + " layer of the certificate" })
-      : el("div", { class: "ph", text: "No image for this layer. Boxes show where differences were found." }));
+    stage.prepend(k
+      ? el("img", { src: imgs[k], alt: LAYERS.find((l) => l[0] === k)[1] + " layer of the page" })
+      : el("div", { class: "ph", text: "No image for this page. Boxes show where differences were found." }));
     toggles.forEach(([key, b]) => b.setAttribute("aria-pressed", key === k));
   };
-  const toggles = LAYERS.map(([k, name]) => [k, el("button", { type: "button", disabled: imgs[k] ? null : "", "aria-pressed": "false", text: name, onclick: () => setLayer(k) })]);
+  const toggles = avail.map(([k, name]) => [k, el("button", { type: "button", "aria-pressed": "false", text: name, onclick: () => setLayer(k) })]);
 
   let current = null;
   const select = (id, fromBox) => {
@@ -210,24 +296,24 @@ function viewer(r) {
 
   const mk = (f) => {
     const [x, y, bw, bh] = f.bbox;
-    const label = `${TYPE_LABEL[f.type] || f.type}, ${f.field ? FIELD_LABEL[f.field] || f.field : "outside protected areas"}`;
+    const label = `${TYPE_LABEL[f.type] || f.type}, ${f.line != null ? "line " + (f.line + 1) : "outside the text lines"}`;
     boxes[f.id] = el("button", { type: "button", class: "box s-" + f.severity, "aria-label": "Finding: " + label,
       style: `left:${x / w * 100}%;top:${y / h * 100}%;width:${bw / w * 100}%;height:${bh / h * 100}%`, onclick: () => select(f.id, true) });
     stage.append(boxes[f.id]);
     items[f.id] = el("button", { type: "button", class: "finding", "aria-pressed": "false", onclick: () => select(f.id, false) },
-      el("span", { class: "h" }, TYPE_LABEL[f.type] || f.type, " | ", f.field ? FIELD_LABEL[f.field] || f.field : "Outside protected areas",
+      el("span", { class: "h" }, TYPE_LABEL[f.type] || f.type, " | ", f.line != null ? "Line " + (f.line + 1) : "Outside the text lines",
         chip(f.severity, f.severity), el("span", { text: pct(f.confidence) })),
       el("p", { text: f.message }));
     return el("li", {}, items[f.id]);
   };
 
-  const all = r.findings || [];
+  const all = p.findings || [];
   const main = all.filter((f) => f.type !== "unknown").map(mk);
   const minor = all.filter((f) => f.type === "unknown").map(mk);
-  setLayer(layer);
+  setLayer(avail.length ? avail[0][0] : null);
 
   return el("div", {},
-    el("div", { class: "layers", role: "group", "aria-label": "Image layer" }, toggles.map((t) => t[1])),
+    toggles.length ? el("div", { class: "layers", role: "group", "aria-label": "Image layer" }, toggles.map((t) => t[1])) : null,
     stage,
     el("h3", { text: "Findings" }),
     main.length ? el("ul", { class: "findings" }, main) : el("p", { class: "muted", text: "No findings of a known type." }),
@@ -235,41 +321,24 @@ function viewer(r) {
 }
 
 /* ---------- issue ---------- */
-const SAMPLE = { name: "Juan Dela Cruz (sample)", student_id: "2026-00001", program: "BS Computer Science", award: "With Honors", grade: "1.50", date_issued: new Date().toISOString().slice(0, 10) };
-const form = $("issue-form");
-let reissueOf = null;
+const groups4 = (s) => (s.match(/.{1,4}/g) || []).join(" ");
+const issued = (r) => el("div", { class: "issued" },
+  el("h3", { text: `Issued: ${r.doc_id}, version ${r.version}` }),
+  el("ul", { class: "meta" },
+    [["Title", r.title], ["Pages", r.pages], ["Fingerprint", groups4(r.fingerprint)]].map(([k, v]) => el("li", {}, k + ": ", el("b", { text: String(v) })))),
+  el("div", { class: "row" }, el("a", { class: "btn primary", href: r.pdf_url, download: "", text: "Download sealed PDF" })));
 
-function fillForm(v) { for (const k in v) form.elements[k].value = v[k]; }
-function setReissue(entry) {
-  reissueOf = entry ? entry.doc_id : null;
-  $("issue-title").textContent = entry ? `Reissue ${entry.doc_id} (new version)` : "Issue a certificate";
-  $("issue-sub").textContent = entry ? "Edit the fields, then submit. The old version will be superseded." : "Sample values are fictional.";
-  $("issue-btn").textContent = entry ? "Reissue certificate" : "Issue certificate";
-  $("issue-reset").hidden = !entry;
-  fillForm(entry ? entry.fields : SAMPLE);
-  say("i-status", ""); $("i-result").replaceChildren();
-}
-fillForm(SAMPLE);
-$("issue-reset").onclick = () => setReissue(null);
-
-form.addEventListener("submit", async (e) => {
+$("issue-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const data = Object.fromEntries(new FormData(form));
   const btn = $("issue-btn");
   btn.disabled = true;
-  say("i-status", "Signing and rendering…", "busy");
+  say("i-status", "Converting, signing and rendering…", "busy");
   $("i-result").replaceChildren();
   try {
-    const r = await post(reissueOf ? `/api/registry/${encodeURIComponent(reissueOf)}/reissue` : "/api/issue", data);
+    const r = await api("/api/issue", { method: "POST", body: new FormData(e.target) });
     say("i-status", "");
-    $("i-result").replaceChildren(el("div", { class: "issued" },
-      el("h3", { text: `Issued: ${r.doc_id}, version ${r.version}` }),
-      el("img", { src: r.png_url, alt: "Preview of the issued certificate" }),
-      el("div", { class: "row" },
-        el("a", { class: "btn primary", href: r.png_url, download: "" , text: "Download PNG" }),
-        el("a", { class: "btn", href: r.pdf_url, download: "", text: "Download PDF" }))));
-    reissueOf = null;
-  } catch (err) { say("i-status", "Couldn't issue the certificate. " + err.message, "err"); }
+    $("i-result").replaceChildren(issued(r));
+  } catch (err) { staffCall(err); say("i-status", "Couldn't issue the document. " + err.message, "err"); }
   finally { btn.disabled = false; }
 });
 
@@ -278,33 +347,49 @@ async function loadRegistry() {
   say("r-status", "Loading registry…", "busy");
   try {
     const list = await api("/api/registry");
-    say("r-status", list.length ? "" : "No certificates issued yet.", "muted");
+    say("r-status", list.length ? "" : "No documents issued yet.", "muted");
     $("r-list").replaceChildren(...list.map(entryCard));
   } catch (e) {
+    staffCall(e);
     $("r-list").replaceChildren();
     say("r-status", "Couldn't load the registry. " + e.message, "err");
   }
 }
 $("reg-refresh").onclick = loadRegistry;
 
+let reissueDoc = null;
+$("reissue-in").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f || !reissueDoc) return;
+  const fd = new FormData(); fd.append("file", f);
+  say("r-status", "Reissuing…", "busy");
+  try {
+    const r = await api(`/api/registry/${encodeURIComponent(reissueDoc)}/reissue`, { method: "POST", body: fd });
+    await loadRegistry();
+    $("r-status").prepend(el("div", { class: "muted", text: `Reissued ${r.doc_id} as version ${r.version}.` }));
+  } catch (err) { staffCall(err); say("r-status", "Couldn't reissue. " + err.message, "err"); }
+});
+
 function entryCard(en) {
-  const f = en.fields;
   const actions = en.status === "active" ? [
     el("button", { type: "button", class: "btn danger", text: "Revoke", onclick: async () => {
-      if (!confirm(`Revoke ${en.doc_id} (${f.name})? Verifying it will report it as revoked.`)) return;
-      try { await post(`/api/registry/${encodeURIComponent(en.doc_id)}/revoke`, {}); } catch (e) { say("r-status", "Couldn't revoke. " + e.message, "err"); return; }
+      if (!confirm(`Revoke ${en.doc_id} (${en.title})? Verifying it will report it as revoked.`)) return;
+      try { await post(`/api/registry/${encodeURIComponent(en.doc_id)}/revoke`, {}); } catch (e) { staffCall(e); say("r-status", "Couldn't revoke. " + e.message, "err"); return; }
       loadRegistry();
     } }),
-    el("button", { type: "button", class: "btn", text: "Reissue", onclick: () => { setReissue(en); showTab($("tab-issue")); } }),
+    el("button", { type: "button", class: "btn", text: "Reissue", onclick: () => { reissueDoc = en.doc_id; $("reissue-in").click(); } }),
   ] : [];
   return el("article", { class: "entry" },
-    el("div", { class: "row spread" }, el("span", { class: "t", text: f.name }), chip(en.status, en.status)),
-    el("div", { class: "d", text: `Student ID ${f.student_id} | ${en.doc_id} v${en.version} | issued ${new Date(en.issued_at).toLocaleString()}` }),
-    el("div", { class: "row" },
-      el("a", { class: "btn", href: en.png_url, text: "PNG" }), el("a", { class: "btn", href: en.pdf_url, text: "PDF" }), actions));
+    el("div", { class: "row spread" }, el("span", { class: "t", text: en.title }), chip(en.status, en.status)),
+    el("div", { class: "d", text: `${en.source_name} | ${en.source_type.toUpperCase()} | ${en.pages} page${en.pages === 1 ? "" : "s"}` }),
+    el("div", { class: "d", text: `${en.doc_id} v${en.version} | fingerprint ${groups4(en.fingerprint)} | issued ${new Date(en.issued_at).toLocaleString()}` }),
+    el("div", { class: "row" }, el("a", { class: "btn", href: en.pdf_url, download: "", text: "Download PDF" }), actions));
 }
 
 /* ---------- health ---------- */
 api("/api/health").then(
-  (h) => { $("health").textContent = `Offline mode: on-device OCR (${h.ocr_engine})`; },
+  (h) => {
+    $("health").textContent = `Offline mode: on-device OCR (${h.ocr_engine})`;
+    $("conv-note").hidden = h.converter !== false;
+  },
   () => { $("health").textContent = "Server status unavailable."; });

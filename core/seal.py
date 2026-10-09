@@ -1,10 +1,10 @@
-"""Seal = canonical JSON payload + Ed25519 signature, carried in the QR as SG1.<b64url(payload)>.<b64url(sig)>.
+"""Seal = SG2.<doc>.<ver>.<p>.<n>.<h>.<kid>.<sig>, carried in the QR of every issued page. See CONTRACTS.md.
 
-b64url is unpadded. Payload uses short keys (see FIELD_KEYS); the public API uses long keys.
+sig = unpadded base64url Ed25519 signature over the UTF-8 bytes of everything before the last dot.
 """
 import base64
 import hashlib
-import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,12 +14,12 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
-PREFIX = "SG1"
-FIELD_KEYS = {"name": "n", "student_id": "sid", "program": "prog", "award": "aw", "grade": "gr", "date_issued": "dt"}
+PREFIX = "SG2"
+_SEAL = re.compile(r"SG2\.([0-9a-f]{8})\.([1-9]\d{0,3})\.([1-9]\d{0,3})\.([1-9]\d{0,3})\.([0-9a-f]{16})\.([0-9a-f]{8})\.([A-Za-z0-9_-]{86})")
 
 
 class SealError(ValueError):
-    """Seal text is not a well-formed SG1 seal."""
+    """Seal text is not a well-formed SG2 seal."""
 
 
 @dataclass(frozen=True)
@@ -27,8 +27,10 @@ class SealData:
     kid: str
     doc_id: str
     version: int
-    fields: dict[str, str]  # long keys: name, student_id, program, award, grade, date_issued
-    payload: bytes  # exact signed bytes
+    page: int  # 1-based
+    pages: int
+    fingerprint: str  # first 16 hex chars of SHA-256 of the content PDF
+    signed: bytes  # exact signed bytes
     signature: bytes
 
 
@@ -36,7 +38,7 @@ class SealData:
 class SealCheck:
     ok: bool
     reason: str  # "ok" | "malformed" | "untrusted_kid" | "bad_signature"
-    data: SealData | None  # parsed payload whenever it parses, even if untrusted
+    data: SealData | None  # parsed seal whenever it parses, even if untrusted
 
 
 _RAW = serialization.Encoding.Raw, serialization.PublicFormat.Raw
@@ -51,11 +53,6 @@ def _b64d(s: str) -> bytes:
     if _b64e(b) != s:  # reject non-canonical trailing bits so every text change changes the bytes
         raise ValueError("non-canonical base64")
     return b
-
-
-def canonical_json(obj) -> bytes:
-    """json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=False) encoded as UTF-8."""
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
 def _raw(public_key: Ed25519PublicKey) -> bytes:
@@ -103,30 +100,27 @@ def load_trusted_keys(keys_dir: Path | None = None) -> dict[str, Ed25519PublicKe
     return out
 
 
-def make_seal(fields: dict[str, str], doc_id: str, version: int, private_key: Ed25519PrivateKey) -> str:
-    """Build and sign the seal string. kid is derived from private_key. fields uses long keys (all six required)."""
-    payload = canonical_json({"kid": kid_of(private_key.public_key()), "doc": doc_id, "ver": version,
-                              "f": {short: fields[long] for long, short in FIELD_KEYS.items()}})
-    return f"{PREFIX}.{_b64e(payload)}.{_b64e(private_key.sign(payload))}"
+def make_seal(doc_id: str, version: int, page: int, pages: int, fingerprint: str, private_key: Ed25519PrivateKey) -> str:
+    """Build and sign the seal string for one page. kid is derived from private_key."""
+    body = f"{PREFIX}.{doc_id}.{version}.{page}.{pages}.{fingerprint}.{kid_of(private_key.public_key())}"
+    text = f"{body}.{_b64e(private_key.sign(body.encode()))}"
+    parse_seal(text)  # refuse to sign anything the verifier would call malformed
+    return text
 
 
 def parse_seal(text: str) -> SealData:
-    """Decode without verifying. Raises SealError on any structural problem (prefix, base64, JSON, missing keys)."""
+    """Decode without verifying. Raises SealError on any structural problem."""
+    m = _SEAL.fullmatch(text.strip())
+    if not m:
+        raise SealError("malformed seal")
+    doc, ver, page, pages, h, kid, sig = m.groups()
     try:
-        prefix, p, s = text.strip().split(".")
-        if prefix != PREFIX:
-            raise ValueError("prefix")
-        payload, sig = _b64d(p), _b64d(s)
-        obj = json.loads(payload.decode("utf-8"))
-        kid, doc, ver, f = obj["kid"], obj["doc"], obj["ver"], obj["f"]
-        if not (isinstance(kid, str) and isinstance(doc, str) and type(ver) is int and isinstance(f, dict)):
-            raise ValueError("types")
-        if not all(isinstance(f[k], str) for k in FIELD_KEYS.values()):
-            raise ValueError("fields")
-        fields = {long: f[short] for long, short in FIELD_KEYS.items()}
-    except (ValueError, KeyError, TypeError, AttributeError) as e:  # UnicodeDecodeError/JSONDecodeError/binascii.Error are ValueErrors
+        signature = _b64d(sig)
+    except ValueError as e:
         raise SealError(f"malformed seal: {e}") from e
-    return SealData(kid, doc, ver, fields, payload, sig)
+    if int(page) > int(pages):
+        raise SealError("malformed seal: page beyond page count")
+    return SealData(kid, doc, int(ver), int(page), int(pages), h, text.strip().rsplit(".", 1)[0].encode(), signature)
 
 
 def verify_seal(text: str, trusted: dict[str, Ed25519PublicKey]) -> SealCheck:
@@ -139,7 +133,7 @@ def verify_seal(text: str, trusted: dict[str, Ed25519PublicKey]) -> SealCheck:
     if key is None:
         return SealCheck(False, "untrusted_kid", d)
     try:
-        key.verify(d.signature, d.payload)
+        key.verify(d.signature, d.signed)
     except InvalidSignature:
         return SealCheck(False, "bad_signature", d)
     return SealCheck(True, "ok", d)

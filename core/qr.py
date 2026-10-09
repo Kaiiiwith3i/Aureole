@@ -55,7 +55,7 @@ def render_qr(text: str, size_px: int) -> np.ndarray:
 
 
 def symbol_quad(text: str, bbox: list[int]) -> np.ndarray:
-    """(4, 2) float32 corners TL, TR, BR, BL (outer edge of the symbol, no quiet zone) in template px
+    """(4, 2) float32 corners TL, TR, BR, BL (outer edge of the symbol, no quiet zone) in page px
     when render_qr(text, bbox[2]) is pasted at bbox [x, y, w, h]. Used for the QR-corner alignment fallback."""
     x, y, w, _ = bbox
     n = _build(text).modules_count
@@ -81,7 +81,7 @@ def _cv2(img: np.ndarray):
 
 def decode_qr(image: np.ndarray) -> QRResult | None:
     """Find a QR code in a BGR or gray image. Try zxing-cpp, then cv2.QRCodeDetector on: original, grayscale,
-    2x upscale, adaptive threshold. If several codes are found prefer one whose text starts with "SG1.". None if nothing decodes."""
+    2x upscale, adaptive threshold. If several codes are found prefer one whose text starts with "SG2.". None if nothing decodes."""
     gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     big = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
     thr = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 51, 10)
@@ -93,5 +93,5 @@ def decode_qr(image: np.ndarray) -> QRResult | None:
             if found:
                 break
         if found:
-            return next((r for r in found if r.text.startswith("SG1.")), found[0])
+            return next((r for r in found if r.text.startswith("SG2.")), found[0])
     return None

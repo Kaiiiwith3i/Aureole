@@ -43,13 +43,15 @@ def _load():
         logging.getLogger(mod).setLevel(logging.ERROR)
         eng = RapidOCR(params={"Global.log_level": "error"}) if mod == "rapidocr" else RapidOCR()
 
-        def run(bgr, det, eng=eng):
+        def run(bgr, det, eng=eng, boxes=False):
             if mod == "rapidocr":
                 o = eng(bgr, use_det=det, use_cls=False)
-                return list(o.txts or ()), list(o.scores or ())
-            res, _ = eng(bgr, use_det=det, use_cls=False)  # legacy: [[box?, text, score]]
+                t, s = list(o.txts or ()), list(o.scores or ())
+                return (t, s, o.boxes if o.boxes is not None else []) if boxes else (t, s)
+            res, _ = eng(bgr, use_det=det, use_cls=False)  # legacy: [[box, text, score]]
             res = res or []
-            return [r[-2] for r in res], [float(r[-1]) for r in res]
+            t, s = [r[-2] for r in res], [float(r[-1]) for r in res]
+            return (t, s, [r[0] for r in res]) if boxes else (t, s)
 
         _engine = (f"rapidocr {_pkg_version('rapidocr', 'rapidocr_onnxruntime')} (onnxruntime)", run)
         return _engine
@@ -59,7 +61,8 @@ def _load():
         raise RuntimeError("No OCR engine installed: need rapidocr, rapidocr_onnxruntime or easyocr") from None
     reader = easyocr.Reader(["en"], gpu=False)  # ponytail: untested fallback, may download models
     _engine = (f"easyocr {_pkg_version('easyocr')}",
-               lambda bgr, det: tuple(map(list, zip(*[(t, c) for _, t, c in reader.readtext(bgr)])) or ([], [])))
+               lambda bgr, det, boxes=False: (lambda r: ([t for _, t, _ in r], [c for _, _, c in r])
+                                              + (([b for b, _, _ in r],) if boxes else ()))(reader.readtext(bgr)))
     return _engine
 
 
@@ -119,3 +122,33 @@ def read_text(image: np.ndarray) -> OcrResult:
     if not any(txts):
         return OcrResult("", 0.0)
     return OcrResult(" ".join(t for t in txts if t), float(min(s for t, s in zip(txts, scores) if t)))
+
+
+@dataclass
+class OcrLine:
+    bbox: list[int]  # [x, y, w, h] image px, axis-aligned around the detected quad
+    text: str
+    confidence: float
+
+
+def read_lines(image: np.ndarray) -> list[OcrLine]:
+    """Detect and read every text line of a BGR image, top-to-bottom then left-to-right. [] when nothing is read."""
+    with _lock:
+        txts, scores, boxes = _load()[1](image, True, boxes=True)
+    out = []
+    for t, s, b in zip(txts, scores, boxes):
+        b = np.asarray(b, float).reshape(-1, 2)
+        x0, y0 = np.floor(b.min(0)).astype(int)
+        x1, y1 = np.ceil(b.max(0)).astype(int)
+        if t.strip():
+            out.append(OcrLine([int(x0), int(y0), int(x1 - x0), int(y1 - y0)], t.strip(), float(s)))
+    # same row = vertical centres within half the shorter box height
+    out.sort(key=lambda l: (l.bbox[1] + l.bbox[3] / 2, l.bbox[0]))
+    rows: list[list[OcrLine]] = []
+    for l in out:
+        c = l.bbox[1] + l.bbox[3] / 2
+        if rows and abs(c - (rows[-1][0].bbox[1] + rows[-1][0].bbox[3] / 2)) < min(l.bbox[3], rows[-1][0].bbox[3]) / 2:
+            rows[-1].append(l)
+        else:
+            rows.append([l])
+    return [l for r in rows for l in sorted(r, key=lambda l: l.bbox[0])]

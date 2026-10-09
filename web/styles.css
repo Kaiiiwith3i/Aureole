@@ -54,10 +54,10 @@ a.btn{display:inline-flex;align-items:center;text-decoration:none}
 .banner .hl{font-size:1.75rem;font-weight:700;line-height:1.25;margin:.2rem 0 0;color:var(--ink)}
 .v-AUTHENTIC{--c:var(--green);--bg-c:var(--green-bg)}
 .v-AUTHENTIC_WITH_NOTES{--c:var(--teal);--bg-c:var(--teal-bg)}
-.v-MISMATCH,.v-INVALID_SEAL{--c:var(--red);--bg-c:var(--red-bg)}
+.v-MODIFIED,.v-INVALID_SEAL{--c:var(--red);--bg-c:var(--red-bg)}
 .v-INCONCLUSIVE{--c:var(--amber);--bg-c:var(--amber-bg)}
 .v-REVOKED{--c:var(--purple);--bg-c:var(--purple-bg)}
-.v-NO_SEAL{--c:var(--slate);--bg-c:var(--slate-bg)}
+.v-NOT_ISSUED{--c:var(--slate);--bg-c:var(--slate-bg)}
 .meta{display:flex;flex-wrap:wrap;gap:.25rem 1.5rem;margin:1rem 0 0;padding:0;list-style:none;font-size:.9rem;color:var(--muted)}
 .meta b{color:var(--ink)}
 .notes{font-size:.9rem;color:var(--muted);margin:.5rem 0 0;padding-left:1.2rem}
@@ -95,6 +95,17 @@ details{margin-top:1rem}
 summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center}
 details .findings{margin-top:.5rem}
 .disclaimer{margin-top:2rem;padding-top:1rem;border-top:2px solid var(--line);font-weight:600;text-align:center}
+
+.queue{list-style:none;margin:0 0 .75rem;padding:0;display:grid;gap:.4rem}
+.queue li{display:flex;gap:.6rem;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:.3rem .3rem .3rem .8rem}
+.pages{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-top:1.25rem}
+.pg{min-width:44px;min-height:44px;font:inherit;font-weight:700;color:var(--c);background:var(--bg-c);border:2px solid var(--c);border-radius:6px;cursor:pointer}
+.pg[aria-pressed=true]{background:var(--c);color:#fff}
+.pagehead{display:flex;flex-wrap:wrap;gap:.5rem .75rem;align-items:center;margin-top:1.25rem;padding:.8rem 1rem;border-left:6px solid var(--c);background:var(--bg-c)}
+.pagehead .chip{background:#fff}
+.pagehead .ph-t{font-weight:700;color:var(--ink)}
+.gate .form{margin-top:0}
+.form input[type=file]{padding:.5rem .6rem}
 
 /* forms / registry */
 .form{display:grid;gap:1rem;max-width:560px;margin-top:1rem}

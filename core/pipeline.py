@@ -1,68 +1,96 @@
 """issue() / reissue() / revoke() / verify(). Orchestrator-owned. See CONTRACTS.md."""
+import hashlib
+import json
 import secrets
 import time
 import uuid
+from datetime import date
+from pathlib import Path
 
 import cv2
 import numpy as np
 
-from app.schemas import CertFields, FieldResult, Finding, Report, ReportImages
-from core import align, classify, compare, data_dir, diff, forensics, ocr, qr, seal, template
+from app.schemas import Finding, LineResult, PageReport, Report, ReportImages
+from core import align, classify, convert, data_dir, diff, forensics, layout, lines, ocr, qr, seal, stamp
 from core.registry import Registry
 
 MAX_SIDE = 3000  # px; larger inputs are downscaled
-ZONE_MARGIN = 8  # px around a field zone when cropping for OCR
 NOTE_CONF = 0.6  # a finding at or above this confidence affects the verdict
-MIN_ZONE_PIXELS = 30  # changed pixels inside a zone before a region counts as touching that field
+MIN_LINE_PIXELS = 30  # changed pixels inside a line's box before a region counts as touching that line
+ADDED_TEXT_CHARS = 4  # letters/digits OCR must read in a region off every line before it counts as added text
+RANK = ["INVALID_SEAL", "NOT_ISSUED", "REVOKED", "MODIFIED", "INCONCLUSIVE", "AUTHENTIC_WITH_NOTES", "AUTHENTIC"]  # worst first
 
 HEADLINES = {
-    "AUTHENTIC": "Seal verified. Every protected field matches the issuer's record.",
-    "AUTHENTIC_WITH_NOTES": "Seal verified and every protected field matches. We found extra markings outside the protected areas.",
+    "digital": "This file is identical to the issued document.",
+    "AUTHENTIC": "Seal verified. No differences from the issued document were found.",
+    "AUTHENTIC_WITH_NOTES": "Seal verified and the text matches the issued document. We found extra markings on the page.",
+    "revoked": "This seal is genuine, but the issuer has revoked this document.",
+    "superseded": "This seal is genuine, but the issuer replaced this document with version {n}.",
+    "unread": "Seal verified, but parts of the page couldn't be read clearly enough to confirm them. Try a sharper photo.",
+    "no_qr": "This looks like a Signet page, but we couldn't read its seal. Try a flatter, sharper photo.",
     "INVALID_SEAL": "This seal wasn't issued by a trusted issuer.",
+    "no_seal": "No Signet seal was found, so this isn't a document issued by this system.",
+    "no_record": "This seal has no matching record in the registry.",
+    "other_doc": "This page belongs to a different issued document.",
+    "different": "The content of this page is different from the document this seal was issued for.",
+    "added": "Text was added to this page that isn't in the issued document.",
+    "altered": "A line on this page looks altered compared with the issued document.",
 }
 MESSAGES = {
     "stamp": "A stamp was added {where}.",
     "handwriting": "Handwriting or pen marks were added {where}.",
     "physical_damage": "A stain or physical damage is visible {where}.",
     "fold": "A fold or crease is visible {where}.",
-    "text_change": "The text {where} differs from the issued original.",
+    "text_change": "The text {where} differs from the issued document.",
     "unknown": "Minor difference, likely capture noise.",
 }
 
 
 # ---------------------------------------------------------------- issuing
 
-def _publish(doc_id: str, version: int, fields: dict[str, str]) -> dict:
-    fields = CertFields(**fields).model_dump()  # trust boundary: same caps as the API
+def issued_dir(doc_id: str, version: int) -> Path:
+    return data_dir() / "issued" / f"{doc_id}_v{version}"
+
+
+def _publish(doc_id: str, version: int, data: bytes, filename: str, title: str) -> dict:
+    content, source_type = convert.to_pdf(data, filename)
     key, kid = seal.load_or_create_issuer_key()
-    text = seal.make_seal(fields, doc_id, version, key)
-    image = template.render_certificate(fields, {"seal": text, "doc_id": doc_id, "version": version})
-    # Never issue a certificate that would fail its own verification (glyphs the font lacks, scripts the OCR can't read, blanks).
-    unreadable = [f.label for f in _read_fields(image, image, fields, template.zones()) if f.status != "MATCH"]
-    if unreadable:
-        raise ValueError(f"Can't issue this certificate: {', '.join(unreadable)} wouldn't read back reliably from the printed page. "
-                         "Use Latin letters, digits and common punctuation.")
-    out = data_dir() / "issued"
-    out.mkdir(exist_ok=True)
-    png, pdf = out / f"{doc_id}_v{version}.png", out / f"{doc_id}_v{version}.pdf"
-    template.save_png(image, png)
-    template.save_pdf(image, pdf)
-    Registry().issue(doc_id, version, kid, fields, text)
-    return {"doc_id": doc_id, "version": version, "seal": text, "png_path": png, "pdf_path": pdf}
+    issued = stamp.stamp(content, doc_id, version, key, date.today().isoformat())
+    pages = []
+    for i in range(stamp.page_count(issued)):
+        image = stamp.render_page(issued, i)
+        code = qr.decode_qr(image)
+        if code is None or not seal.verify_seal(code.text, seal.load_trusted_keys()).ok:
+            raise RuntimeError(f"page {i + 1} of the sealed file failed its own seal check")  # never hand out a file that can't verify
+        pages.append({"landscape": image.shape[1] > image.shape[0], "lines": lines.page_lines(issued, i, image)})
+    name = Path(filename).name[:120] or "upload"
+    out = issued_dir(doc_id, version)
+    out.mkdir(parents=True)
+    (out / "issued.pdf").write_bytes(issued)
+    (out / f"source.{source_type}").write_bytes(data)
+    (out / "pages.json").write_text(json.dumps(pages, ensure_ascii=False))
+    entry = {"doc_id": doc_id, "version": version, "kid": kid, "title": (title.strip() or Path(name).stem)[:120],
+             "source_name": name, "source_type": source_type, "pages": len(pages),
+             "source_sha256": hashlib.sha256(data).hexdigest(), "content_sha256": hashlib.sha256(content).hexdigest(),
+             "file_sha256": hashlib.sha256(issued).hexdigest()}
+    Registry().issue(entry)
+    return {"doc_id": doc_id, "version": version, "title": entry["title"], "pages": len(pages),
+            "fingerprint": entry["content_sha256"][:16], "pdf_path": out / "issued.pdf"}
 
 
-def issue(fields: dict[str, str]) -> dict:
-    """Sign, render, save PNG+PDF under data_dir()/issued/, register.
-    Returns {"doc_id", "version", "seal", "png_path", "pdf_path"} (paths are pathlib.Path). ValueError on invalid fields."""
-    return _publish(secrets.token_hex(4), 1, fields)
+def issue(data: bytes, filename: str, title: str = "") -> dict:
+    """Convert, seal, store and register an upload.
+    Returns {"doc_id", "version", "title", "pages", "fingerprint", "pdf_path"}. ValueError when it can't be issued."""
+    return _publish(secrets.token_hex(4), 1, data, filename, title)
 
 
-def reissue(doc_id: str, fields: dict[str, str]) -> dict:
-    """New version of an existing doc_id; the old one becomes superseded. Same return shape as issue(). KeyError if unknown."""
+def reissue(doc_id: str, data: bytes, filename: str, title: str = "") -> dict:
+    """New version of an existing doc_id; the old one becomes superseded. KeyError if unknown."""
     registry = Registry()
-    if registry.get(doc_id) is None:
+    old = registry.get(doc_id)
+    if old is None:
         raise KeyError(doc_id)
-    return _publish(doc_id, registry.next_version(doc_id), fields)
+    return _publish(doc_id, registry.next_version(doc_id), data, filename, title or old["title"])
 
 
 def revoke(doc_id: str) -> bool:
@@ -71,114 +99,86 @@ def revoke(doc_id: str) -> bool:
 
 # ---------------------------------------------------------------- verifying
 
-def _load(data: bytes) -> np.ndarray:
-    image = None
-    try:
-        if data[:5] == b"%PDF-":
-            import pypdfium2 as pdfium
+def _load(files: list[tuple[str, bytes]]) -> list[np.ndarray]:
+    """Every page of every upload as a BGR image, in upload order."""
+    images = []
+    for _, data in files:
+        try:
+            if data[:5] == b"%PDF-":
+                batch = [stamp.render_page(data, i) for i in range(min(stamp.page_count(data), layout.MAX_PAGES + 1))]
+            else:
+                batch = [cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)]
+        except Exception:  # empty, truncated, corrupt or password-protected: the decoders raise their own error types
+            batch = [None]
+        if not batch or any(im is None or im.size == 0 for im in batch):
+            raise ValueError("One of these files isn't a readable PNG, JPG or PDF.")
+        images += batch
+    if not 1 <= len(images) <= layout.MAX_PAGES:
+        raise ValueError(f"Send between 1 and {layout.MAX_PAGES} pages at a time.")
+    for i, im in enumerate(images):
+        scale = MAX_SIDE / max(im.shape[:2])
+        if scale < 1:
+            images[i] = cv2.resize(im, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    return images
 
-            page = pdfium.PdfDocument(data)[0]
-            image = np.array(page.render(scale=200 / 72).to_pil().convert("RGB"))[:, :, ::-1].copy()
-        elif data:
-            image = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
-    except Exception:  # empty, truncated or corrupt upload: the decoders raise their own error types
-        image = None
-    if image is None or image.size == 0:
-        raise ValueError("This file isn't a readable PNG, JPG or PDF.")
-    scale = MAX_SIDE / max(image.shape[:2])
-    if scale < 1:
-        image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-    return image
 
-
-def _zone_of(region, zones: dict) -> str | None:
-    """The protected zone holding the most changed pixels of this region (mask-based, so a diagonal crease's bbox doesn't count)."""
+def _line_of(region, page_lines: list[dict]) -> int | None:
+    """Index of the line holding the most changed pixels of this region (mask-based, so a diagonal crease's bbox doesn't count)."""
     rx, ry, rw, rh = region.bbox
-    best, best_px = None, MIN_ZONE_PIXELS - 1
-    for key, z in zones.items():
-        x, y, w, h = z["bbox"]
+    best, best_px = None, MIN_LINE_PIXELS - 1
+    for i, line in enumerate(page_lines):
+        x, y, w, h = line["bbox"]
         x0, y0, x1, y1 = max(rx, x), max(ry, y), min(rx + rw, x + w), min(ry + rh, y + h)
         if x1 <= x0 or y1 <= y0:
             continue
         px = int(np.count_nonzero(region.mask[y0 - ry:y1 - ry, x0 - rx:x1 - rx]))
         if px > best_px:
-            best, best_px = key, px
+            best, best_px = i, px
     return best
 
 
-def _label(key: str, zones: dict) -> str:
-    return zones[key]["label"] or key.replace("_", " ").title()
-
-
-def _noun(key: str, zones: dict) -> str:
-    """Label for use mid-sentence: "student ID", "general weighted average"."""
-    return _label(key, zones).lower().replace(" id", " ID")
-
-
 def _letters(text: str) -> str:
-    """Normalized letters and digits only, so dropped punctuation or spacing never counts as a different value."""
-    return "".join(c for c in compare.normalize(text) if c.isalnum())
+    return "".join(c for c in text if c.isalnum())
 
 
-def _ink_only(crop: np.ndarray) -> np.ndarray:
-    """The crop with coloured marks (stamp ink, ballpoint, stains) painted white. Sealed values are printed in black,
-    so a red stamp or blue pen stroke lying over a field shouldn't change what OCR reads there."""
-    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-    out = crop.copy()
-    out[(hsv[:, :, 1] > 70) & (hsv[:, :, 2] > 70)] = 255
-    return out
+def _added_text(scan: np.ndarray, region) -> float:
+    """OCR confidence if the ink this region added reads as printed text, else 0. Only the changed pixels are read
+    (everything else is painted white), so genuine text next to the region can't be mistaken for an addition."""
+    if region.added < 0.5:
+        return 0.0
+    x, y, w, h = region.bbox
+    crop = lines.ink_only(scan[y:y + h, x:x + w])
+    crop[cv2.dilate(region.mask, np.ones((7, 7), np.uint8)) == 0] = 255
+    read = ocr.read_text(crop)
+    return read.confidence if read.confidence >= 0.8 and len(_letters(read.text)) >= ADDED_TEXT_CHARS else 0.0
 
 
-def _read_fields(scan: np.ndarray, expected: np.ndarray, signed: dict[str, str], zones: dict) -> list[FieldResult]:
-    """OCR every protected zone of `scan` and compare with the signed values."""
-    m, out = ZONE_MARGIN, []
-    for key, z in zones.items():
-        x, y, w, h = z["bbox"]
-        read = ocr.read_text(_ink_only(scan[y - m:y + h + m, x - m:x + w + m]))
-        result = compare.compare_field(signed[key], read.text, read.confidence, z["numeric"])
-        status = result.status
-        # The 0.90 tolerance exists for OCR noise. A confident reading whose letters differ from the sealed value
-        # ("Santos" -> "Santoz") is not noise if the same engine reads the clean render exactly: that is a reprint.
-        if (status == "MATCH" and read.confidence >= compare.CONF_MIN and _letters(read.text) != _letters(signed[key])
-                and _letters(ocr.read_text(expected[y - m:y + h + m, x - m:x + w + m]).text) == _letters(signed[key])):
-            status = "MISMATCH"
-        out.append(FieldResult(key=key, label=_label(key, zones), signed=signed[key], read=read.text, status=status,
-                               similarity=round(result.similarity, 3), confidence=round(read.confidence, 3)))
-    return out
-
-
-def _decide(status: str, current_version, aligned: bool, fields: list[FieldResult], findings: list[Finding], zones: dict) -> tuple[str, str]:
-    """(verdict, headline) for a document whose seal verified. Order is the contract's."""
+def _decide(status: str, current_version, aligned: bool, results: list[LineResult], checked: int, findings: list[Finding]) -> tuple[str, str]:
+    """(verdict, headline) for a page whose seal verified and is in the registry. Order is the contract's.
+    `results` holds the lines that didn't match; `checked` is how many lines were read."""
     if status == "superseded":
-        return "REVOKED", f"This seal is genuine, but the issuer replaced this document with version {current_version}."
+        return "REVOKED", HEADLINES["superseded"].format(n=current_version)
     if status == "revoked":
-        return "REVOKED", "This seal is genuine, but the issuer has revoked this document."
-    by_key = {f.key: f for f in fields}
-    bad = next((f for f in fields if f.status == "MISMATCH"), None)
-    if bad is None:
-        hit = next((x for x in findings if x.type == "text_change" and x.confidence >= NOTE_CONF
-                    and x.field and by_key[x.field].status != "UNREADABLE"), None)
-        bad = by_key[hit.field] if hit else None
-    if bad is not None:
-        name = _noun(bad.key, zones)
-        if compare.normalize(bad.read) == compare.normalize(bad.signed):  # caught by the visual diff, not by OCR
-            return "MISMATCH", f'The printed {name} looks altered compared with the sealed record ("{bad.signed}").'
-        return "MISMATCH", f'The printed {name} doesn\'t match the sealed record: sealed "{bad.signed}", printed "{bad.read}".'
-    if not aligned:
-        return "INCONCLUSIVE", "Seal verified, but we couldn't read the page clearly enough to confirm it. Try a sharper photo."
-    unread = next((f for f in fields if f.status == "UNREADABLE"), None)
-    if unread is not None:
-        return "INCONCLUSIVE", f"Seal verified, but we couldn't read the {_noun(unread.key, zones)} clearly enough to confirm it. Try a sharper photo."
-    notes = [x for x in findings if x.type != "unknown" and x.confidence >= NOTE_CONF]
-    if notes:
-        if any(x.field for x in notes):
-            return "AUTHENTIC_WITH_NOTES", "Seal verified and every protected field matches. We found extra markings, some touching protected areas."
+        return "REVOKED", HEADLINES["revoked"]
+    unreadable = {r.index for r in results if r.status == "UNREADABLE"}
+    mismatched = [r for r in results if r.status == "MISMATCH"]
+    change = next((x for x in findings if x.type == "text_change" and x.confidence >= NOTE_CONF and x.line not in unreadable), None)
+    if mismatched or change:
+        if checked and len(results) > checked / 2:
+            return "MODIFIED", HEADLINES["different"]
+        if mismatched:
+            return "MODIFIED", f"{len(mismatched)} line(s) on this page don't match the issued document."
+        return "MODIFIED", HEADLINES["added" if change.line is None else "altered"]
+    if not aligned or unreadable:
+        return "INCONCLUSIVE", HEADLINES["unread"]
+    if any(x.type != "unknown" and x.confidence >= NOTE_CONF for x in findings):
         return "AUTHENTIC_WITH_NOTES", HEADLINES["AUTHENTIC_WITH_NOTES"]
     return "AUTHENTIC", HEADLINES["AUTHENTIC"]
 
 
-def verify(data: bytes, filename: str = "upload") -> Report:
-    """Verify PNG/JPG/PDF bytes. Raises ValueError only when the file can't be decoded as an image or PDF."""
+def verify(files: list[tuple[str, bytes]]) -> Report:
+    """Verify uploads [(filename, bytes)]: the issued PDF itself, or photos/scans of its pages (PNG/JPG/PDF).
+    Raises ValueError only when a file can't be decoded or the page count is out of range."""
     start = last = time.perf_counter()
     timings: dict[str, float] = {}
 
@@ -188,131 +188,172 @@ def verify(data: bytes, filename: str = "upload") -> Report:
         timings[name] = round(timings.get(name, 0) + (now - last) * 1000, 1)
         last = now
 
-    image = _load(data)
-    lap("load")
+    registry = Registry()
     rid = uuid.uuid4().hex[:12]
-    out = data_dir() / "reports" / rid
-    out.mkdir(parents=True)
-    urls: dict[str, str] = {}
+    name = files[0][0][:120] + (f" (+{len(files) - 1} more)" if len(files) > 1 else "")
+    report = Report(report_id=rid, filename=name, mode="pages", verdict="NOT_ISSUED", headline=HEADLINES["no_seal"])
 
-    def save(name: str, img: np.ndarray) -> None:
-        cv2.imwrite(str(out / f"{name}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        urls[name] = f"/reports/{rid}/{name}.jpg"
+    def known(entry: dict) -> None:
+        report.doc_id, report.version, report.kid = entry["doc_id"], entry["version"], entry["kid"]
+        report.registry_status, report.pages_total = entry["status"], entry["pages"]
+        report.current_version = entry["current_version"] if entry["status"] == "superseded" else None
 
-    def done(report: Report) -> Report:
-        lap("write")
+    exact = registry.find_file(hashlib.sha256(files[0][1]).hexdigest()) if len(files) == 1 else None
+    if exact:  # the only exact result: byte-identical to what was issued
+        known(exact)
+        report.mode, report.pages_checked = "digital", list(range(1, exact["pages"] + 1))
+        report.verdict, report.headline = _decide(exact["status"], report.current_version, True, [], 0, [])
+        if report.verdict == "AUTHENTIC":
+            report.headline = HEADLINES["digital"]
         timings["total"] = round((time.perf_counter() - start) * 1000, 1)
-        report.images, report.timings = ReportImages(**urls), timings
+        report.timings = timings
         return report
 
-    report = Report(report_id=rid, filename=filename, verdict="NO_SEAL", headline="", image_size=[image.shape[1], image.shape[0]])
-    code = qr.decode_qr(image)
-    if code is None:  # steep angle or glare can defeat the QR reader while the corner markers still read: flatten, look again
-        flat = align.align(image)
-        if flat is not None:
-            image, code = flat.image, qr.decode_qr(flat.image)
-            report.image_size = [image.shape[1], image.shape[0]]
-            if code is None:  # it is one of ours, so "no seal" (and a forensic guess) would be the wrong thing to say
-                report.verdict = "INCONCLUSIVE"
-                report.headline = "This looks like a Signet certificate, but we couldn't read its seal. Try a flatter, sharper photo."
-                save("scan", image)
-                return done(report)
-    lap("qr")
+    images = _load(files)
+    lap("load")
+    out = data_dir() / "reports" / rid
+    out.mkdir(parents=True)
+    trusted = seal.load_trusted_keys()
+    sealed: list[tuple[PageReport, seal.SealData]] = []  # pages whose seal is in the registry
 
-    if code is None:  # forensics only
-        ela = forensics.ela(image)
-        hits = forensics.copy_move(image)
+    for index, image in enumerate(images, 1):
+        page = PageReport(index=index, verdict="NOT_ISSUED", headline=HEADLINES["no_seal"], image_size=[image.shape[1], image.shape[0]])
+        report.pages.append(page)
+        urls: dict[str, str] = {}
+
+        def save(kind: str, img: np.ndarray) -> None:
+            cv2.imwrite(str(out / f"{index}_{kind}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            urls[kind] = f"/reports/{rid}/{index}_{kind}.jpg"
+            page.images = ReportImages(**urls)
+
+        def signet(c):  # a QR printed inside the document itself (a payment code, a link) is not a seal
+            return c if c and c.text.startswith(seal.PREFIX + ".") else None
+
+        code = signet(qr.decode_qr(image))
+        if code is None:  # steep angle or glare can defeat the QR reader while the corner markers still read: flatten, look again
+            flat = align.align(image)
+            if flat is not None:
+                image, code = flat.image, signet(qr.decode_qr(flat.image))
+                page.image_size = [image.shape[1], image.shape[0]]
+                if code is None:  # it is one of ours, so "no seal" would be the wrong thing to say
+                    page.verdict, page.headline = "INCONCLUSIVE", HEADLINES["no_qr"]
+        lap("qr")
+        if code is None:
+            save("scan", image)
+            continue
+
+        check = seal.verify_seal(code.text, trusted)
+        d = check.data
+        if d is not None and report.doc_id is None:
+            report.doc_id, report.version, report.kid = d.doc_id, d.version, d.kid
+        if not check.ok:  # nothing on the page can be trusted, so nothing else is compared
+            page.verdict, page.headline = "INVALID_SEAL", HEADLINES["INVALID_SEAL"]
+            save("scan", image)
+            continue
+        page.page = d.page
+        entry = registry.get(d.doc_id, d.version)
+        if entry is None or entry["kid"] != d.kid or entry["pages"] != d.pages or not entry["content_sha256"].startswith(d.fingerprint):
+            page.headline = HEADLINES["no_record"]  # the registry decides, not the signature
+            save("scan", image)
+            continue
+        sealed.append((page, d))
+        if len(sealed) == 1:
+            known(entry)
+        lap("seal")
+
+        folder = issued_dir(d.doc_id, d.version)
+        meta = json.loads((folder / "pages.json").read_text())[d.page - 1]
+        frame = layout.layout(meta["landscape"])
+        aligned = align.align(image, code.corners, qr.symbol_quad(code.text, frame.qr), meta["landscape"])
+        if aligned is not None and aligned.layout != frame:
+            aligned = None
+        lap("align")
+        if aligned is None:
+            page.verdict, page.headline = _decide(entry["status"], entry["current_version"], False, [], 0, [])
+            save("scan", image)
+            continue
+
+        scan = aligned.image
+        page.image_size = [scan.shape[1], scan.shape[0]]
+        expected = stamp.render_page((folder / "issued.pdf").read_bytes(), d.page - 1)
+        lap("render")
+
+        page_lines = meta["lines"]
+        readable = sorted((i for i, ln in enumerate(page_lines) if ln["readable"]),
+                          key=lambda i: -page_lines[i]["bbox"][2] * page_lines[i]["bbox"][3])[:lines.MAX_LINES]
+        results: dict[int, LineResult] = {}
+        for i in readable:
+            c = lines.check_line(scan, expected, page_lines[i])
+            if c.status != "MATCH":
+                results[i] = LineResult(index=i, bbox=page_lines[i]["bbox"], expected=page_lines[i]["text"], read=c.read, status=c.status,
+                                        similarity=round(c.similarity, 3), confidence=round(c.confidence, 3))
+        page.lines_total, page.lines_unchecked = len(page_lines), len(page_lines) - len(readable)
+        if page.lines_unchecked:
+            page.notes.append(f"{page.lines_unchecked} line(s) on this page can't be read by machine and were compared visually only.")
+        lap("ocr")
+
+        regions = diff.diff_regions(expected, scan, frame.ignore)
+        lap("diff")
+        ela = cv2.warpPerspective(forensics.ela(image), aligned.H, (scan.shape[1], scan.shape[0]))
         lap("forensics")
-        for i, hit in enumerate(hits, 1):
-            for part, box in (("a", hit.src), ("b", hit.dst)):
-                report.findings.append(Finding(
-                    id=f"f{i}{part}", type="digital_edit", bbox=list(box), severity="warning", confidence=round(hit.confidence, 2),
-                    message="This area and another part of the page are near-identical copies, which suggests one of them was pasted in."))
-        found = f"found {len(hits)} region(s) that look digitally modified." if hits else "found no signs of digital modification."
-        report.headline = f"No seal found, so authenticity can't be confirmed. Forensic analysis {found}"
-        save("scan", image)
+
+        boxes = [ln["bbox"] for ln in page_lines]
+        for n, region in enumerate(regions, 1):
+            kind, conf = classify.classify(classify.extract_features(scan, expected, region, boxes, ela))
+            line = _line_of(region, page_lines)
+            if line is None and (read_conf := _added_text(scan, region)):  # the whole page is protected, not just its lines
+                kind, conf = "text_change", max(float(conf), read_conf)
+            where = "on a printed line" if line is not None else "outside the printed text"
+            severity = "critical" if kind == "text_change" else "warning" if line is not None and kind != "unknown" else "info"
+            bbox = [int(v) for v in region.bbox]
+            if severity == "critical" and line is not None:  # frame the whole line, one finding per line: keep the more confident
+                bbox = page_lines[line]["bbox"]
+                same = next((x for x in page.findings if x.severity == "critical" and x.line == line), None)
+                if same is not None:
+                    if same.confidence >= conf:
+                        continue
+                    page.findings.remove(same)
+            message = "Printed text was added here." if kind == "text_change" and line is None else MESSAGES[kind].format(where=where)
+            page.findings.append(Finding(id=f"f{n}", type=kind, bbox=bbox, line=line, severity=severity,
+                                         confidence=round(float(conf), 2), message=message))
+        lap("classify")
+
+        for i, r in results.items():  # a mark lying on a line makes a differing read unreliable: junk characters are damage, not an edit
+            cover = next((x for x in page.findings if x.line == i and x.type not in ("text_change", "unknown")
+                          and x.confidence >= NOTE_CONF), None)
+            if r.status == "MISMATCH" and cover is not None:
+                r.status = "UNREADABLE"
+                page.notes.append(f"Something covers a line ({cover.type.replace('_', ' ')}), so its text couldn't be read reliably.")
+        for i, r in results.items():  # every MISMATCH line is highlighted, whether or not the visual diff caught it
+            if r.status == "MISMATCH" and not any(x.line == i and x.type == "text_change" for x in page.findings):
+                page.findings.append(Finding(id=f"m{i}", type="text_change", bbox=r.bbox, line=i, severity="critical", confidence=r.confidence,
+                                             message=f'This line reads "{r.read}", which is not what was issued.'))
+        severity_rank = {"critical": 0, "warning": 1, "info": 2}
+        page.findings.sort(key=lambda x: (x.type == "unknown", severity_rank[x.severity], -x.confidence))
+        page.lines = sorted(results.values(), key=lambda r: r.index)
+        page.lines_matched = len(readable) - len(results)
+
+        page.verdict, page.headline = _decide(entry["status"], entry["current_version"], True, page.lines, len(readable), page.findings)
+        save("scan", scan)
+        save("expected", expected)
+        save("diff", diff.diff_overlay(scan, regions))
         save("ela", forensics.heatmap(ela))
-        return done(report)
+        lap("write")
 
-    check = seal.verify_seal(code.text, seal.load_trusted_keys())
-    lap("seal")
-    if check.data is not None:
-        report.doc_id, report.version, report.kid = check.data.doc_id, check.data.version, check.data.kid
-    if not check.ok:  # nothing on the page can be trusted, so nothing else is compared
-        report.verdict, report.headline = "INVALID_SEAL", HEADLINES["INVALID_SEAL"]
-        save("scan", image)
-        return done(report)
-
-    signed = check.data
-    entry = Registry().get(signed.doc_id, signed.version)
-    report.registry_status = entry["status"] if entry else "unknown"
-    report.current_version = entry["current_version"] if entry and entry["status"] == "superseded" else None
-    if entry is None:
-        report.notes.append("This document isn't in the local registry, so we couldn't check whether it was revoked.")
-
-    tpl, zones = template.load_template(), template.zones()
-    aligned = align.align(image, code.corners, qr.symbol_quad(code.text, tpl["qr"]["bbox"]))
-    lap("align")
-    if aligned is None:
-        report.verdict, report.headline = _decide(report.registry_status, report.current_version, False, [], [], zones)
-        save("scan", image)
-        return done(report)
-
-    scan = aligned.image
-    report.image_size = [scan.shape[1], scan.shape[0]]
-    expected = template.render_certificate(signed.fields, {"seal": code.text, "doc_id": signed.doc_id, "version": signed.version})
-    lap("render")
-
-    report.fields = _read_fields(scan, expected, signed.fields, zones)
-    lap("ocr")
-
-    size = tpl["markers"]["size"]
-    ignore = [[mk["x"] - 12, mk["y"] - 12, size + 24, size + 24] for mk in tpl["markers"]["items"]]
-    qx, qy, qw, qh = tpl["qr"]["bbox"]
-    ignore.append([qx - 6, qy - 6, qw + 12, qh + 12])
-    regions = diff.diff_regions(expected, scan, ignore)
-    lap("diff")
-    ela = cv2.warpPerspective(forensics.ela(image), aligned.H, (scan.shape[1], scan.shape[0]))
-    lap("forensics")
-
-    zone_boxes = [z["bbox"] for z in zones.values()]
-    for i, region in enumerate(regions, 1):
-        kind, conf = classify.classify(classify.extract_features(scan, expected, region, zone_boxes, ela))
-        field = _zone_of(region, zones)
-        where = f"over the {_noun(field, zones)} field" if field else "outside the protected areas"
-        severity = "info" if not field else "critical" if kind == "text_change" else "warning"
-        bbox = [int(v) for v in region.bbox]
-        if severity == "critical":  # frame the whole field, not the few glyph fragments that differ
-            zx, zy, zw, zh = zones[field]["bbox"]
-            x0, y0 = min(bbox[0], zx), min(bbox[1], zy)
-            bbox = [x0, y0, max(bbox[0] + bbox[2], zx + zw) - x0, max(bbox[1] + bbox[3], zy + zh) - y0]
-            same = next((x for x in report.findings if x.severity == "critical" and x.field == field), None)
-            if same is not None:  # one critical finding per field: keep the more confident one
-                if same.confidence >= conf:
-                    continue
-                report.findings.remove(same)
-        report.findings.append(Finding(
-            id=f"f{i}", type=kind, bbox=bbox, field=field, severity=severity,
-            confidence=round(float(conf), 2), message=MESSAGES[kind].format(where=where)))
-    lap("classify")
-
-    for f in report.fields:  # a mark lying on a field makes a differing read unreliable: junk characters are damage, not an edit
-        cover = next((x for x in report.findings if x.field == f.key and x.type not in ("text_change", "unknown")
-                      and x.confidence >= NOTE_CONF), None)
-        if f.status == "MISMATCH" and cover is not None:
-            f.status = "UNREADABLE"
-            report.notes.append(f"Something covers the {_noun(f.key, zones)} ({cover.type.replace('_', ' ')}), so its value couldn't be read reliably.")
-    for f in report.fields:  # every MISMATCH field is highlighted, whether or not the visual diff caught it
-        if f.status == "MISMATCH" and not any(x.field == f.key and x.type == "text_change" for x in report.findings):
-            report.findings.append(Finding(
-                id=f"m-{f.key}", type="text_change", bbox=list(zones[f.key]["bbox"]), field=f.key, severity="critical",
-                confidence=f.confidence, message=f'The printed {_noun(f.key, zones)} reads "{f.read}", but the sealed value is "{f.signed}".'))
-    severity_rank = {"critical": 0, "warning": 1, "info": 2}
-    report.findings.sort(key=lambda x: (x.type == "unknown", severity_rank[x.severity], -x.confidence))
-
-    report.verdict, report.headline = _decide(report.registry_status, report.current_version, True, report.fields, report.findings, zones)
-    save("scan", scan)
-    save("expected", expected)
-    save("diff", diff.diff_overlay(scan, regions))
-    save("ela", forensics.heatmap(ela))
-    return done(report)
+    if sealed:
+        first = sealed[0][1]
+        for page, d in sealed[1:]:
+            if (d.doc_id, d.version) != (first.doc_id, first.version):
+                page.verdict, page.headline = "MODIFIED", HEADLINES["other_doc"]
+        report.pages_checked = sorted({d.page for page, d in sealed if (d.doc_id, d.version) == (first.doc_id, first.version)})
+    worst = min(report.pages, key=lambda p: RANK.index(p.verdict))
+    report.verdict = worst.verdict
+    report.headline = (f"Page {worst.index}: " if len(report.pages) > 1 else "") + worst.headline
+    missing = [p for p in range(1, (report.pages_total or 0) + 1) if p not in report.pages_checked]
+    if report.verdict in ("AUTHENTIC", "AUTHENTIC_WITH_NOTES") and missing:
+        report.verdict = "INCONCLUSIVE"
+        report.headline = (f"{len(report.pages_checked)} of {report.pages_total} pages checked with no differences found. "
+                           f"Not provided: page {', '.join(map(str, missing))}.")
+    timings["total"] = round((time.perf_counter() - start) * 1000, 1)
+    report.timings = timings
+    return report

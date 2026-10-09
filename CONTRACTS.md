@@ -85,9 +85,9 @@ Budget: < 5 s per page, models warm.
 - message: one plain sentence, no accusations ("modified", never "forged"/"fake"/"fraud"). Never quotes the issued text.
 
 ### Page verdicts (first rule that applies)
-1. `NOT_ISSUED`: no QR and no markers on the page.
+1. `NOT_ISSUED`: no seal QR and no markers on the page. A QR whose text doesn't start with `SG2.` is part of the document (a payment code, a link), not a seal.
 2. `INCONCLUSIVE`: markers found but the seal can't be read even after flattening.
-3. `INVALID_SEAL`: a QR was found but it isn't a well-formed SG2 seal, the signature fails, or `kid` isn't trusted.
+3. `INVALID_SEAL`: a QR starting with `SG2.` was found but it isn't well-formed, the signature fails, or `kid` isn't trusted.
 4. `NOT_ISSUED`: the signature is valid but the registry has no such `doc`/`ver`, or `h`/`n`/`p` don't match its record. The registry decides.
 5. `REVOKED`: registry status `revoked` or `superseded` (`current_version` set when superseded). The page is still analysed.
 6. `MODIFIED`: a line is MISMATCH, or a `text_change` finding has confidence >= 0.6.

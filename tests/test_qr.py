@@ -7,10 +7,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from core.qr import QUIET_MODULES, decode_qr, render_qr, symbol_quad
 from core.seal import make_seal
 
-_F = {"name": "Maria Cristina Santos-Villanueva", "student_id": "2021-00123", "program": "Bachelor of Science in Computer Science",
-      "award": "Cum Laude", "grade": "1.45", "date_issued": "2026-03-15"}
-TEXT = make_seal(_F, "ab12cd34", 1, Ed25519PrivateKey.generate())
-assert 330 <= len(TEXT) <= 380, len(TEXT)
+TEXT = make_seal("ab12cd34", 1, 2, 10, "0123456789abcdef", Ed25519PrivateKey.generate())
+assert TEXT.startswith("SG2.") and 120 <= len(TEXT) <= 140, len(TEXT)
 
 
 def page(bbox=(100, 80, 540, 540), size=(900, 800)):
@@ -48,6 +46,13 @@ def test_downscale():
     assert decode_qr(cv2.resize(page(), None, fx=0.7, fy=0.7, interpolation=cv2.INTER_AREA)).text == TEXT
 
 
+def test_prefers_sg2_code():
+    img = np.full((900, 1600), 255, np.uint8)
+    img[100:640, 100:640] = render_qr("hello other code", 540)
+    img[100:640, 900:1440] = render_qr(TEXT, 540)
+    assert decode_qr(img).text == TEXT
+
+
 def test_blank_is_none():
     assert decode_qr(np.full((400, 400, 3), 255, np.uint8)) is None
 
@@ -59,7 +64,7 @@ def test_too_long():
 
 def test_module_size_380_chars():
     import qrcode
-    text = "SG1." + "A" * 376
+    text = "SG2." + "A" * 376
     qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_H, box_size=1, border=0)
     qr.add_data(text)
     qr.make(fit=True)

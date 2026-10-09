@@ -1,0 +1,48 @@
+{
+  "report_id": "mock0001",
+  "filename": "scan-pages.jpg (sample)",
+  "mode": "pages",
+  "verdict": "MODIFIED",
+  "headline": "Page 2: 1 line(s) on this page don't match the issued document.",
+  "doc_id": "a1b2c3d4",
+  "version": 1,
+  "current_version": null,
+  "kid": "5e6f7a8b",
+  "registry_status": "active",
+  "pages_total": 3,
+  "pages_checked": [1, 2],
+  "pages": [
+    {
+      "index": 1, "page": 1, "verdict": "AUTHENTIC_WITH_NOTES",
+      "headline": "Seal verified and the text matches the issued document. We found extra markings on the page.",
+      "lines": [], "lines_total": 24, "lines_matched": 22, "lines_unchecked": 2,
+      "findings": [
+        {"id": "p1f1", "type": "stamp", "bbox": [1000, 1650, 380, 260], "line": null, "severity": "info", "confidence": 0.88,
+         "message": "A rubber stamp was placed on the page, outside the printed text."}
+      ],
+      "notes": [],
+      "images": {"scan": null, "expected": null, "diff": null, "ela": null},
+      "image_size": [1654, 2339]
+    },
+    {
+      "index": 2, "page": 2, "verdict": "MODIFIED",
+      "headline": "1 line(s) on this page don't match the issued document.",
+      "lines": [
+        {"index": 7, "bbox": [220, 900, 1150, 52], "expected": "Total payable: PHP 12,500.00", "read": "Total payable: PHP 72,500.00",
+         "status": "MISMATCH", "similarity": 0.93, "confidence": 0.94},
+        {"index": 12, "bbox": [220, 1300, 800, 48], "expected": "Prepared by Maria Santos", "read": "Prepared by Mar",
+         "status": "UNREADABLE", "similarity": 0.6, "confidence": 0.41}
+      ],
+      "lines_total": 30, "lines_matched": 28, "lines_unchecked": 0,
+      "findings": [
+        {"id": "p2f1", "type": "text_change", "bbox": [220, 900, 1150, 52], "line": 7, "severity": "critical", "confidence": 0.94,
+         "message": "The text on this line was changed from what was issued."}
+      ],
+      "notes": [],
+      "images": {"scan": null, "expected": null, "diff": null, "ela": null},
+      "image_size": [1654, 2339]
+    }
+  ],
+  "notes": ["Page 3 was not provided."],
+  "timings": {"total": 6400}
+}

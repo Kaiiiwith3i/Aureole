@@ -46,8 +46,15 @@ def ocr() -> str:
     return f"OCR engine {o.engine_name()} warm in {time.perf_counter() - t0:.1f}s"
 
 
+def office() -> str:
+    from core import convert
+    if convert.has_converter():
+        return "LibreOffice found (converts DOCX, XLS, XLSX)"
+    return "LibreOffice not found: DOCX, XLS and XLSX uploads are refused; PDF and TXT work without it"
+
+
 def main() -> int:
-    for name, step in (("fonts", fonts), ("keys", keys), ("data", data), ("ocr", ocr)):
+    for name, step in (("fonts", fonts), ("keys", keys), ("data", data), ("ocr", ocr), ("office", office)):
         try:
             print(f"[ok] {name}: {step()}")
         except Exception as e:

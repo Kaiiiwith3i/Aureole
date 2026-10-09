@@ -22,56 +22,66 @@
 
 <main>
   <section id="verify" role="tabpanel" aria-labelledby="tab-verify">
-    <div id="drop" class="drop" tabindex="0" aria-label="Drop a certificate photo or scan here">
-      <p class="drop-title">Drop a photo or scan of a certificate here</p>
-      <p class="muted">PNG, JPG or PDF. Checked fully offline on this device.</p>
+    <div id="drop" class="drop" tabindex="0" aria-label="Drop pages of an issued document here">
+      <p class="drop-title">Drop the issued file, or photos of its pages</p>
+      <p class="muted">PNG, JPG or PDF, up to 10 files. Checked fully offline on this device.</p>
       <div class="row">
-        <button type="button" class="btn primary" id="choose">Choose file</button>
+        <button type="button" class="btn primary" id="choose">Choose files</button>
         <button type="button" class="btn" id="camera">Take photo</button>
         <button type="button" class="btn" id="webcam" hidden>Use webcam</button>
         <button type="button" class="btn" id="sample" hidden>Load sample report</button>
       </div>
-      <input type="file" id="file-in" accept="image/*,application/pdf" hidden>
-      <input type="file" id="cam-in" accept="image/*,application/pdf" capture="environment" hidden>
+      <input type="file" id="file-in" accept="image/*,application/pdf" multiple hidden>
+      <input type="file" id="cam-in" accept="image/*" capture="environment" hidden>
     </div>
     <div id="cam-box" class="cam-box" hidden>
       <video id="cam-video" autoplay playsinline muted></video>
       <div class="row">
-        <button type="button" class="btn primary" id="cam-snap">Capture and verify</button>
+        <button type="button" class="btn primary" id="cam-snap">Capture page</button>
         <button type="button" class="btn" id="cam-stop">Cancel</button>
       </div>
     </div>
+    <div id="queue" hidden>
+      <h3>Ready to check</h3>
+      <ul id="queue-list" class="queue"></ul>
+      <div class="row">
+        <button type="button" class="btn primary" id="go">Verify</button>
+        <button type="button" class="btn" id="add-page">Add another page</button>
+        <button type="button" class="btn" id="clear">Clear</button>
+      </div>
+    </div>
     <div id="v-status" role="status" aria-live="polite"></div>
-    <div id="report"></div>
+    <div id="report" aria-live="polite"></div>
   </section>
 
   <section id="issue" role="tabpanel" aria-labelledby="tab-issue" hidden>
-    <h2 id="issue-title">Issue a certificate</h2>
-    <p class="muted" id="issue-sub">Sample values are fictional.</p>
-    <form id="issue-form" class="form">
-      <label>Name <input name="name" maxlength="60" required></label>
-      <label>Student ID <input name="student_id" maxlength="20" required></label>
-      <label>Program <input name="program" maxlength="60" required></label>
-      <label>Award <input name="award" maxlength="40" required></label>
-      <label>Grade <input name="grade" maxlength="8" required></label>
-      <label>Date issued <input name="date_issued" type="date" required></label>
-      <div class="row">
-        <button type="submit" class="btn primary" id="issue-btn">Issue certificate</button>
-        <button type="button" class="btn" id="issue-reset" hidden>Cancel reissue</button>
-      </div>
-    </form>
-    <div id="i-status" role="status" aria-live="polite"></div>
-    <div id="i-result"></div>
+    <div class="gate" data-gate hidden></div>
+    <div data-staff hidden>
+      <h2>Issue a document</h2>
+      <p class="muted">Seals a TXT, DOCX, PDF or XLS/XLSX file into a framed PDF and records it in the registry.</p>
+      <form id="issue-form" class="form">
+        <label>File <input type="file" name="file" id="issue-file" accept=".txt,.docx,.pdf,.xls,.xlsx" required></label>
+        <p class="muted" id="conv-note" hidden>DOCX and XLS need LibreOffice on this machine. PDF and TXT work without it.</p>
+        <label>Title (optional) <input name="title" maxlength="120"></label>
+        <div class="row"><button type="submit" class="btn primary" id="issue-btn">Issue document</button></div>
+      </form>
+      <div id="i-status" role="status" aria-live="polite"></div>
+      <div id="i-result"></div>
+    </div>
   </section>
 
   <section id="registry" role="tabpanel" aria-labelledby="tab-registry" hidden>
-    <div class="row spread"><h2>Registry</h2><button type="button" class="btn" id="reg-refresh">Refresh</button></div>
-    <div id="r-status" role="status" aria-live="polite"></div>
-    <div id="r-list"></div>
+    <div class="gate" data-gate hidden></div>
+    <div data-staff hidden>
+      <div class="row spread"><h2>Registry</h2><button type="button" class="btn" id="reg-refresh">Refresh</button></div>
+      <div id="r-status" role="status" aria-live="polite"></div>
+      <div id="r-list"></div>
+      <input type="file" id="reissue-in" accept=".txt,.docx,.pdf,.xls,.xlsx" hidden>
+    </div>
   </section>
 </main>
 
-<footer class="foot"><span id="health">Checking status…</span></footer>
+<footer class="foot row spread"><span id="health">Checking status…</span><button type="button" class="btn" id="signout" hidden>Sign out</button></footer>
 <script src="app.js"></script>
 </body>
 </html>
