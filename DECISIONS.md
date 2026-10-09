@@ -14,3 +14,10 @@ Calls made without asking, newest last.
 10. **NO_SEAL findings use input-image pixel coordinates** (there are no markers to align to); `Report.image_size` tells the UI the coordinate space. Their severity is `warning`.
 11. **Report images are JPEG** (q85), not PNG: ~10x faster to write, which matters for the 5 s budget.
 12. **Task list lives in `TASKS.md`**: this session has no task-list tool.
+13. **Subagents run as `general-purpose` with an explicit `model` override** (Sonnet for builders/QA, Haiku for chores). The session only loads agent definitions at start, so the freshly written `.claude/agents/*` types weren't selectable. The role rules are inlined in each prompt; nothing build-related runs on Opus.
+14. **A seal that fails verification stops the analysis** (`INVALID_SEAL` shows the scan only). Its fields can't be trusted, so comparing against them would mislead.
+15. **Revoked/superseded documents still get the full analysis**; only the verdict is overridden. One code path, and the report still shows what's on the page.
+16. **NO_SEAL findings come from copy-move only.** ELA is shown as a layer but isn't turned into findings: on a single-compression JPEG it lights up every text edge, and thresholding it would report false "modified" regions. Both halves of a copy-move pair are boxed, because the detector can't tell which one is the original.
+17. **FastAPI's `/docs` is disabled**: its page loads Swagger assets from a CDN, which would break "zero external URLs".
+18. **An undecodable upload is a 400 error**, not a report. Returning `NO_SEAL` for a corrupt file would be a made-up result.
+19. **Reports are never cleaned up** (`runtime/reports/` grows by ~1 MB per verification). Fine for a demo; add a retention sweep before any long-running deployment.

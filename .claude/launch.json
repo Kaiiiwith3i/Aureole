@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {"name": "signet", "runtimeExecutable": ".venv/bin/python", "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8017"], "port": 8017}
+  ]
+}

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signet</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.5 12 2.5 2.5 4.5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div><h1>Signet</h1><p class="tag">We don't accuse, we explain.</p></div>
+  </div>
+  <div role="tablist" aria-label="Sections" class="tabs">
+    <button role="tab" id="tab-verify" aria-controls="verify" aria-selected="true">Verify</button>
+    <button role="tab" id="tab-issue" aria-controls="issue" aria-selected="false" tabindex="-1">Issue</button>
+    <button role="tab" id="tab-registry" aria-controls="registry" aria-selected="false" tabindex="-1">Registry</button>
+  </div>
+</header>
+
+<main>
+  <section id="verify" role="tabpanel" aria-labelledby="tab-verify">
+    <div id="drop" class="drop" tabindex="0" aria-label="Drop a certificate photo or scan here">
+      <p class="drop-title">Drop a photo or scan of a certificate here</p>
+      <p class="muted">PNG, JPG or PDF. Checked fully offline on this device.</p>
+      <div class="row">
+        <button type="button" class="btn primary" id="choose">Choose file</button>
+        <button type="button" class="btn" id="camera">Take photo</button>
+        <button type="button" class="btn" id="webcam" hidden>Use webcam</button>
+        <button type="button" class="btn" id="sample" hidden>Load sample report</button>
+      </div>
+      <input type="file" id="file-in" accept="image/*,application/pdf" hidden>
+      <input type="file" id="cam-in" accept="image/*,application/pdf" capture="environment" hidden>
+    </div>
+    <div id="cam-box" class="cam-box" hidden>
+      <video id="cam-video" autoplay playsinline muted></video>
+      <div class="row">
+        <button type="button" class="btn primary" id="cam-snap">Capture and verify</button>
+        <button type="button" class="btn" id="cam-stop">Cancel</button>
+      </div>
+    </div>
+    <div id="v-status" role="status" aria-live="polite"></div>
+    <div id="report"></div>
+  </section>
+
+  <section id="issue" role="tabpanel" aria-labelledby="tab-issue" hidden>
+    <h2 id="issue-title">Issue a certificate</h2>
+    <p class="muted" id="issue-sub">Sample values are fictional.</p>
+    <form id="issue-form" class="form">
+      <label>Name <input name="name" maxlength="60" required></label>
+      <label>Student ID <input name="student_id" maxlength="20" required></label>
+      <label>Program <input name="program" maxlength="60" required></label>
+      <label>Award <input name="award" maxlength="40" required></label>
+      <label>Grade <input name="grade" maxlength="8" required></label>
+      <label>Date issued <input name="date_issued" type="date" required></label>
+      <div class="row">
+        <button type="submit" class="btn primary" id="issue-btn">Issue certificate</button>
+        <button type="button" class="btn" id="issue-reset" hidden>Cancel reissue</button>
+      </div>
+    </form>
+    <div id="i-status" role="status" aria-live="polite"></div>
+    <div id="i-result"></div>
+  </section>
+
+  <section id="registry" role="tabpanel" aria-labelledby="tab-registry" hidden>
+    <div class="row spread"><h2>Registry</h2><button type="button" class="btn" id="reg-refresh">Refresh</button></div>
+    <div id="r-status" role="status" aria-live="polite"></div>
+    <div id="r-list"></div>
+  </section>
+</main>
+
+<footer class="foot"><span id="health">Checking status…</span></footer>
+<script src="app.js"></script>
+</body>
+</html>
